@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { secureStorage } from "@/app/lib/secureStorage";
 
 // EIP-1193 provider type (window.ethereum)
 declare global {
@@ -10,6 +11,16 @@ declare global {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+    solana?: {
+      isPhantom?: boolean;
+      connect: () => Promise<{ publicKey: { toBase58: () => string } }>;
+      disconnect: () => Promise<void>;
+      on: (event: string, handler: (...args: unknown[]) => void) => void;
+      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+      publicKey?: {
+        toBase58: () => string;
+      };
     };
   }
 }
@@ -27,6 +38,7 @@ export interface WalletState {
 
 interface WalletContextType extends WalletState {
   connectMetaMask: () => Promise<void>;
+  connectPhantom: () => Promise<void>;
   disconnect: () => void;
   clearError: () => void;
 }
@@ -72,6 +84,7 @@ const defaultState: WalletState = {
 const WalletContext = createContext<WalletContextType>({
   ...defaultState,
   connectMetaMask: async () => {},
+  connectPhantom: async () => {},
   disconnect: () => {},
   clearError: () => {},
 });
@@ -86,33 +99,32 @@ export function truncateAddress(address: string): string {
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<WalletState>(defaultState);
+  const stateRef = useRef(state);
+
+  // Sync ref with state so event listeners always see latest values
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Restore persisted session on mount.
   // sessionStorage is used instead of localStorage so the session is cleared
   // when the browser tab is closed, reducing the window for session hijacking.
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Partial<WalletState> = JSON.parse(stored);
-        // Validate address and walletType before trusting stored data.
-        // Reject anything that doesn't look like a real Ethereum address.
-        if (
-          isValidEthAddress(parsed.address) &&
-          (parsed.walletType === "metamask" || parsed.walletType === "phantom")
-        ) {
-          setState((prev) => ({
-            ...prev,
-            address: parsed.address!,
-            chainId: isValidChainId(parsed.chainId) ? parsed.chainId : null,
-            walletType: parsed.walletType!,
-            isConnected: true,
-          }));
-        } else {
-          // Stored data is invalid or tampered — clear it
-          sessionStorage.removeItem(STORAGE_KEY);
+      secureStorage.getItem(STORAGE_KEY).then((stored) => {
+        if (stored) {
+          const parsed: Partial<WalletState> = JSON.parse(stored);
+          if (parsed.address && parsed.walletType) {
+            setState((prev: WalletState) => ({
+              ...prev,
+              address: parsed.address!,
+              chainId: parsed.chainId ?? null,
+              walletType: parsed.walletType!,
+              isConnected: true,
+            }));
+          }
         }
-      }
+      });
     } catch {
       // Malformed JSON — clear it
       sessionStorage.removeItem(STORAGE_KEY);
@@ -133,26 +145,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         handleDisconnect();
       } else {
         const address = accs[0];
-        // Validate address format before persisting
-        if (!isValidEthAddress(address)) return;
-        setState((prev) => ({ ...prev, address }));
-        persistSession({ address, chainId: state.chainId, walletType: "metamask" });
+        setState((prev: WalletState) => ({ ...prev, address }));
+        persistSession({ address, chainId: stateRef.current.chainId, walletType: "metamask" });
       }
     };
 
     const handleChainChanged = (chainId: unknown) => {
-      if (!isValidChainId(chainId)) return;
-      // If the user switches to an unsupported network, disconnect
-      if (!ALLOWED_CHAIN_IDS.has(chainId)) {
-        handleDisconnect();
-        setState((prev) => ({
-          ...prev,
-          error: "Unsupported network. Please switch to Ethereum Mainnet or Sepolia.",
-        }));
-        return;
-      }
-      setState((prev) => ({ ...prev, chainId }));
-      persistSession({ address: state.address, chainId, walletType: state.walletType });
+      const id = chainId as string;
+      setState((prev: WalletState) => ({ ...prev, chainId: id }));
+      persistSession({ address: stateRef.current.address, chainId: id, walletType: stateRef.current.walletType });
     };
 
     ethereum.on("accountsChanged", handleAccountsChanged);
@@ -162,32 +163,73 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       ethereum.removeListener("accountsChanged", handleAccountsChanged);
       ethereum.removeListener("chainChanged", handleChainChanged);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.address, state.chainId, state.walletType]);
+  }, []);
+
+  // Listen for Solana account changes
+  useEffect(() => {
+    const solana = window.solana;
+    if (!solana) return;
+
+    const handleAccountChanged = (publicKey: { toBase58: () => string } | null) => {
+      if (!publicKey) {
+        handleDisconnect();
+      } else {
+        const address = publicKey.toBase58();
+        setState((prev: WalletState) => ({ ...prev, address }));
+        persistSession({ address, chainId: "5EJ9Vc47M3VvM2x6wCk3F2nZ3qG7yB9rD6aX8cE5fG1h", walletType: "phantom" });
+      }
+    };
+
+    const handleConnect = (publicKey: { toBase58: () => string }) => {
+      const address = publicKey.toBase58();
+      setState((prev: WalletState) => ({
+        ...prev,
+        address,
+        isConnected: true,
+        isConnecting: false,
+        error: null,
+      }));
+      persistSession({ address, chainId: "5EJ9Vc47M3VvM2x6wCk3F2nZ3qG7yB9rD6aX8cE5fG1h", walletType: "phantom" });
+    };
+
+    solana.on("accountChanged", handleAccountChanged);
+    solana.on("connect", handleConnect);
+
+    return () => {
+      solana.removeListener("accountChanged", handleAccountChanged);
+      solana.removeListener("connect", handleConnect);
+    };
+  }, []);
 
   function persistSession(data: { address: string | null; chainId: string | null; walletType: WalletType | null }) {
     if (data.address) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      secureStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } else {
-      sessionStorage.removeItem(STORAGE_KEY);
+      secureStorage.removeItem(STORAGE_KEY);
     }
   }
 
   function handleDisconnect() {
     setState({ ...defaultState });
-    sessionStorage.removeItem(STORAGE_KEY);
+    secureStorage.removeItem(STORAGE_KEY);
+    
+    // Disconnect from Phantom if connected
+    const solana = window.solana;
+    if (solana && state.walletType === "phantom") {
+      solana.disconnect().catch(() => {});
+    }
   }
 
   const connectMetaMask = useCallback(async () => {
     if (!window.ethereum || !window.ethereum.isMetaMask) {
-      setState((prev) => ({
+      setState((prev: WalletState) => ({
         ...prev,
         error: "MetaMask is not installed. Please install the MetaMask browser extension.",
       }));
       return;
     }
 
-    setState((prev) => ({ ...prev, isConnecting: true, error: null }));
+    setState((prev: WalletState) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
       // Request accounts with a 30-second timeout to prevent UI freeze
@@ -248,7 +290,47 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           ? "Connection rejected. Please approve the request in MetaMask."
           : (err as Error)?.message ?? "Failed to connect wallet. Please try again.";
 
-      setState((prev) => ({
+      setState((prev: WalletState) => ({
+        ...prev,
+        isConnecting: false,
+        error: message,
+      }));
+    }
+  }, []);
+
+  const connectPhantom = useCallback(async () => {
+    const solana = window.solana;
+    if (!solana || !solana.isPhantom) {
+      setState((prev: WalletState) => ({
+        ...prev,
+        error: "Phantom wallet not detected. Please install the Phantom browser extension.",
+      }));
+      return;
+    }
+
+    setState((prev: WalletState) => ({ ...prev, isConnecting: true, error: null }));
+
+    try {
+      const response = await solana.connect();
+      const address = response.publicKey.toBase58();
+
+      setState({
+        address,
+        chainId: "5EJ9Vc47M3VvM2x6wCk3F2nZ3qG7yB9rD6aX8cE5fG1h",
+        walletType: "phantom",
+        isConnected: true,
+        isConnecting: false,
+        error: null,
+      });
+
+      persistSession({ address, chainId: "5EJ9Vc47M3VvM2x6wCk3F2nZ3qG7yB9rD6aX8cE5fG1h", walletType: "phantom" });
+    } catch (err: unknown) {
+      const message =
+        (err as { code?: number; message?: string })?.code === 4001
+          ? "Connection rejected. Please approve the request in Phantom."
+          : (err as Error)?.message ?? "Failed to connect Phantom wallet. Please try again.";
+
+      setState((prev: WalletState) => ({
         ...prev,
         isConnecting: false,
         error: message,
@@ -258,15 +340,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = useCallback(() => {
     handleDisconnect();
-  }, []);
+  }, [state.walletType]);
 
   const clearError = useCallback(() => {
-    setState((prev) => ({ ...prev, error: null }));
+    setState((prev: WalletState) => ({ ...prev, error: null }));
   }, []);
 
   return (
     <WalletContext.Provider
-      value={{ ...state, connectMetaMask, disconnect, clearError }}
+      value={{ ...state, connectMetaMask, connectPhantom, disconnect, clearError }}
     >
       {children}
     </WalletContext.Provider>
