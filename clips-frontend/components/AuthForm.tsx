@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createEmbeddedWallet } from "@/app/lib/embeddedWallet";
 
 // Local inline SVG for Google/Apple to avoid external dependencies perfectly matching
 const GoogleIcon = () => (
@@ -41,7 +42,31 @@ export default function AuthForm({ mode = "login" }: AuthFormProps) {
         const res = await MockApi.login(email, password);
         setUser(res.user);
       } else {
+        // 1. Create the user account
         const res = await MockApi.signup(email, password, fullName);
+
+        // 2. Automatically create an embedded Stellar wallet (Web2 flow)
+        //    This runs in the background — wallet creation failure does NOT
+        //    block the signup. The user can retry from their dashboard.
+        try {
+          const walletResult = await createEmbeddedWallet(res.user.id, "testnet", true);
+          // Attach the wallet address to the user record
+          await MockApi.attachWallet(
+            res.user.id,
+            walletResult.wallet.publicKey,
+            walletResult.wallet.walletType,
+            walletResult.wallet.network
+          );
+          // Merge wallet info into the user object before storing in context
+          res.user.walletAddress = walletResult.wallet.publicKey;
+          res.user.walletType = walletResult.wallet.walletType;
+          res.user.walletNetwork = walletResult.wallet.network;
+          res.user.walletCreatedAt = walletResult.wallet.createdAt;
+        } catch {
+          // Non-fatal: wallet creation failed, user can retry from dashboard
+          console.warn("[ClipCash] Embedded wallet creation failed — user can retry from dashboard.");
+        }
+
         setUser(res.user);
       }
     } catch (err: unknown) {
@@ -132,8 +157,14 @@ export default function AuthForm({ mode = "login" }: AuthFormProps) {
           disabled={loading}
           className="w-full bg-brand hover:bg-brand-hover text-black py-[15px] rounded-[12px] font-bold text-[15px] flex justify-center items-center gap-2 transition-all disabled:opacity-70 mt-[6px]"
         >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : 
-            (currentMode === "login" ? "Continue with Email" : "Create Account")}
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-black" />
+              {currentMode === "signup" ? "Creating account & wallet…" : "Signing in…"}
+            </span>
+          ) : (
+            currentMode === "login" ? "Continue with Email" : "Create Account"
+          )}
         </button>
       </form>
       

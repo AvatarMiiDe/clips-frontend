@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { WalletProvider } from "@/components/WalletProvider";
+import { EmbeddedWalletProvider } from "@/components/EmbeddedWalletProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,9 +22,15 @@ export default function RootLayout({
       <body className={inter.className}>
         <div className="radial-bg" />
         <AuthProvider>
-          <WalletProvider>
-            {children}
-          </WalletProvider>
+          {/* EmbeddedWalletProvider is nested inside AuthProvider so it can
+              receive the userId from auth context via the AuthProvider's
+              child components. The userId prop is optional here — individual
+              pages/components call initWallet(userId) directly after signup. */}
+          <EmbeddedWalletProvider>
+            <WalletProvider>
+              {children}
+            </WalletProvider>
+          </EmbeddedWalletProvider>
         </AuthProvider>
       </body>
     </html>

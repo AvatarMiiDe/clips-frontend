@@ -8,6 +8,14 @@ export type User = {
   password?: string;
   onboardingStep: number;
   profile?: Record<string, any>;
+  /**
+   * Phase 2: Embedded wallet fields.
+   * Populated automatically on email signup via createEmbeddedWallet().
+   */
+  walletAddress?: string;
+  walletType?: "embedded" | "freighter" | "external" | "smart_contract";
+  walletNetwork?: "testnet" | "mainnet";
+  walletCreatedAt?: string;
 };
 
 // In-memory fake database
@@ -139,6 +147,72 @@ export const MockApi = {
     user.profile = { ...user.profile, ...data };
     
     return { success: true, user };
+  },
+
+  /**
+   * Attach an embedded wallet address to a user record.
+   * Called automatically after createEmbeddedWallet() succeeds on signup.
+   */
+  attachWallet: async (
+    userId: string,
+    walletAddress: string,
+    walletType: User["walletType"] = "embedded",
+    walletNetwork: User["walletNetwork"] = "testnet"
+  ) => {
+    await delay(200);
+
+    let user: User | undefined = users.find(u => u.id === userId);
+
+    // Auto-recover from localStorage on HMR / page refresh
+    if (!user && typeof window !== "undefined") {
+      const stored = localStorage.getItem("clipcash_user");
+      if (stored) {
+        const parsed = JSON.parse(stored) as User;
+        if (parsed.id === userId) {
+          user = parsed;
+          users.push(user);
+        }
+      }
+    }
+
+    if (!user) throw new Error("User not found");
+
+    user.walletAddress = walletAddress;
+    user.walletType = walletType;
+    user.walletNetwork = walletNetwork;
+    user.walletCreatedAt = new Date().toISOString();
+
+    return { success: true, walletAddress };
+  },
+
+  /**
+   * Retrieve wallet info for a user (mock — in production this hits the backend vault).
+   */
+  getWallet: async (userId: string) => {
+    await delay(300);
+
+    let user: User | undefined = users.find(u => u.id === userId);
+
+    if (!user && typeof window !== "undefined") {
+      const stored = localStorage.getItem("clipcash_user");
+      if (stored) {
+        const parsed = JSON.parse(stored) as User;
+        if (parsed.id === userId) user = parsed;
+      }
+    }
+
+    if (!user) throw new Error("User not found");
+
+    if (!user.walletAddress) return { wallet: null };
+
+    return {
+      wallet: {
+        publicKey: user.walletAddress,
+        walletType: user.walletType,
+        network: user.walletNetwork,
+        createdAt: user.walletCreatedAt,
+      },
+    };
   },
 
   /**
