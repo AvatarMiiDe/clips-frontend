@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wallet } from "lucide-react";
+import { useStellarWallet } from "@/components/StellarWalletProvider";
 import { useAuth } from "./AuthProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,13 @@ export default function AuthForm({ mode = "login" }: AuthFormProps) {
     }
   };
 
+  const { connect: connectStellar, disconnect: disconnectStellar, isConnected: stellarConnected, address: stellarAddress, isLoading: stellarLoading } = useStellarWallet();
+
+  const truncate = (addr?: string | null) => {
+    if (!addr) return "";
+    return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-6)}` : addr;
+  };
+
   return (
     <div id="auth-card" className="w-[440px] bg-surface/80 backdrop-blur-md rounded-[20px] p-[38px] shadow-[0_4px_40px_rgba(0,0,0,0.5)] border border-border relative overflow-hidden">
       {/* Decorative inner glow */}
@@ -97,6 +105,20 @@ export default function AuthForm({ mode = "login" }: AuthFormProps) {
         >
           <AppleIcon />
           Continue with Apple
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (stellarConnected) {
+              disconnectStellar?.(true);
+            } else {
+              void connectStellar?.();
+            }
+          }}
+          className="w-full flex items-center justify-center gap-3 bg-surface-hover hover:bg-border border border-border text-white py-3.5 rounded-[12px] font-medium transition-all text-[14px]"
+        >
+          {stellarLoading ? <Loader2 className="w-[18px] h-[18px] animate-spin" /> : <Wallet />}
+          {stellarConnected ? truncate(stellarAddress) : "Connect Wallet"}
         </button>
       </div>
 

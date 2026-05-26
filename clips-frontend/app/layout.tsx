@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { WalletProvider } from "@/components/WalletProvider";
+import { StellarWalletProvider } from "@/components/StellarWalletProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import CookieConsent from "@/components/CookieConsent";
 import RateLimitToast from "@/components/RateLimitToast";
@@ -30,9 +31,11 @@ export default function RootLayout({
           <ErrorBoundary>
             <AuthProvider>
               <WalletProvider>
+                <StellarWalletProvider>
                 <KeyboardShortcuts />
                 {children}
                 <RateLimitToast />
+                </StellarWalletProvider>
               </WalletProvider>
             </AuthProvider>
           </ErrorBoundary>
