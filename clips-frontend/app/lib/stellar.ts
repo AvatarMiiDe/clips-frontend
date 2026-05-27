@@ -1,17 +1,17 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import {
+  STELLAR_NETWORK,
+  getHorizonUrl,
+  getNetworkPassphrase,
+  getFriendbotUrl,
+} from "./networkConfig";
 
-// Define network configurations
-export const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
+// Re-export so existing callers that import these from stellar.ts keep working.
+export { STELLAR_NETWORK };
 
-export const HORIZON_URL = 
-  STELLAR_NETWORK === "mainnet" 
-    ? "https://horizon.stellar.org" 
-    : "https://horizon-testnet.stellar.org";
+export const HORIZON_URL = getHorizonUrl();
 
-export const NETWORK_PASSPHRASE = 
-  STELLAR_NETWORK === "mainnet" 
-    ? StellarSdk.Networks.PUBLIC 
-    : StellarSdk.Networks.TESTNET;
+export const NETWORK_PASSPHRASE = getNetworkPassphrase();
 
 export const getStellarServer = () => {
   return new StellarSdk.Horizon.Server(HORIZON_URL);
@@ -90,11 +90,11 @@ export const getBalance = async (publicKey: string): Promise<string> => {
 };
 
 export const fundWithFriendbot = async (publicKey: string): Promise<boolean> => {
-  if (STELLAR_NETWORK === "mainnet") {
-    throw new Error("Friendbot is only available on Testnet.");
-  }
+  // getFriendbotUrl() throws a descriptive error when called on mainnet,
+  // preventing accidental Friendbot calls in production.
+  const friendbotUrl = getFriendbotUrl();
   try {
-    const response = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`);
+    const response = await fetch(`${friendbotUrl}?addr=${encodeURIComponent(publicKey)}`);
     if (!response.ok) {
       throw new Error(`Friendbot request failed: ${response.statusText}`);
     }

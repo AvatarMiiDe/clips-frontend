@@ -33,24 +33,25 @@
  * The `walletType: "smart_contract"` field is reserved for this upgrade.
  */
 
-import { WalletStorage } from "./walletStorage";
+import { WalletStorage, WalletStorageError } from "./walletStorage";
+import {
+  STELLAR_NETWORK,
+  NETWORK_CONFIGS,
+  StellarNetwork,
+} from "./networkConfig";
+import { withRetry, withFallback } from "./retryUtils";
 
 // ─── Network config ────────────────────────────────────────────────────────────
+//
+// Network constants are now centralised in networkConfig.ts and driven by the
+// NEXT_PUBLIC_STELLAR_NETWORK environment variable.  Re-export the type and
+// the config map so existing callers of this module don't need to change their
+// imports.
 
-export type StellarNetwork = "testnet" | "mainnet";
+export type { StellarNetwork };
 
-export const STELLAR_NETWORKS: Record<StellarNetwork, { horizonUrl: string; friendbotUrl: string | null; networkPassphrase: string }> = {
-  testnet: {
-    horizonUrl: "https://horizon-testnet.stellar.org",
-    friendbotUrl: "https://friendbot.stellar.org",
-    networkPassphrase: "Test SDF Network ; September 2015",
-  },
-  mainnet: {
-    horizonUrl: "https://horizon.stellar.org",
-    friendbotUrl: null, // No Friendbot on mainnet
-    networkPassphrase: "Public Global Stellar Network ; September 2015",
-  },
-};
+/** @deprecated Import from networkConfig.ts instead */
+export const STELLAR_NETWORKS = NETWORK_CONFIGS;
 
 // ─── Wallet types ──────────────────────────────────────────────────────────────
 
@@ -70,6 +71,64 @@ export interface WalletCreationResult {
   /** Present only immediately after creation — store securely, never log */
   secretKey?: string;
   alreadyExisted: boolean;
+}
+
+// ─── Wallet creation error types ──────────────────────────────────────────────
+
+export type WalletErrorCode =
+  | "KEYPAIR_GENERATION_FAILED"  // Web Crypto API unavailable or failed
+  | "STORAGE_FAILED"             // localStorage unavailable or full
+  | "FUNDING_FAILED"             // Friendbot unreachable (testnet only)
+  | "UNKNOWN";
+
+export class WalletCreationError extends Error {
+  constructor(
+    public readonly code: WalletErrorCode,
+    message: string,
+    public readonly cause?: unknown,
+    /** Whether the caller can safely retry this operation */
+    public readonly retryable: boolean = true
+  ) {
+    super(message);
+    this.name = "WalletCreationError";
+  }
+}
+
+/** Classify a raw error into a typed WalletCreationError */
+function classifyError(err: unknown): WalletCreationError {
+  if (err instanceof WalletCreationError) return err;
+
+  if (err instanceof WalletStorageError) {
+    return new WalletCreationError(
+      "STORAGE_FAILED",
+      err.message,
+      err,
+      // Storage-full is retryable after the user clears space; unavailable is not
+      err.code !== "STORAGE_UNAVAILABLE"
+    );
+  }
+
+  if (err instanceof Error) {
+    if (
+      err.name === "NotSupportedError" ||
+      err.message.includes("crypto") ||
+      err.message.includes("subtle")
+    ) {
+      return new WalletCreationError(
+        "KEYPAIR_GENERATION_FAILED",
+        "Cryptographic key generation is not supported in this browser.",
+        err,
+        false // non-retryable — browser limitation
+      );
+    }
+  }
+
+  return new WalletCreationError(
+    "UNKNOWN",
+    err instanceof Error ? err.message : "An unexpected error occurred during wallet creation.",
+    err,
+    true
+  );
 }
 
 // ─── Stellar keypair generation (pure JS, no native deps) ─────────────────────
@@ -108,27 +167,44 @@ function toBase32(bytes: Uint8Array): string {
  *
  * NOTE: In production, use `Keypair.random()` from @stellar/stellar-sdk
  * which uses proper Ed25519 key generation and CRC16 checksums.
+ *
+ * Throws `WalletCreationError` with code KEYPAIR_GENERATION_FAILED if the
+ * Web Crypto API is unavailable.
  */
 async function generateStellarKeypair(): Promise<{ publicKey: string; secretKey: string }> {
-  // Generate 32 random bytes for the secret key seed
-  const secretBytes = crypto.getRandomValues(new Uint8Array(32));
-  // Derive a "public key" by hashing the secret (simplified — real Stellar uses Ed25519)
-  const publicBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", secretBytes));
+  try {
+    if (typeof crypto === "undefined" || !crypto.subtle) {
+      throw new WalletCreationError(
+        "KEYPAIR_GENERATION_FAILED",
+        "Web Crypto API is not available in this environment.",
+        undefined,
+        false
+      );
+    }
 
-  // Stellar StrKey: version byte + payload + checksum (simplified)
-  // Real format: version(1) + key(32) + checksum(2) → base32
-  const secretPayload = new Uint8Array(33);
-  secretPayload[0] = 0x90; // 'S' version byte (18 << 3)
-  secretPayload.set(secretBytes, 1);
+    // Generate 32 random bytes for the secret key seed
+    const secretBytes = crypto.getRandomValues(new Uint8Array(32));
+    // Derive a "public key" by hashing the secret (simplified — real Stellar uses Ed25519)
+    const publicBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", secretBytes));
 
-  const publicPayload = new Uint8Array(33);
-  publicPayload[0] = 0x30; // 'G' version byte (6 << 3)
-  publicPayload.set(publicBytes, 1);
+    // Stellar StrKey: version byte + payload + checksum (simplified)
+    // Real format: version(1) + key(32) + checksum(2) → base32
+    const secretPayload = new Uint8Array(33);
+    secretPayload[0] = 0x90; // 'S' version byte (18 << 3)
+    secretPayload.set(secretBytes, 1);
 
-  return {
-    publicKey: "G" + toBase32(publicPayload).slice(1, 56),
-    secretKey: "S" + toBase32(secretPayload).slice(1, 56),
-  };
+    const publicPayload = new Uint8Array(33);
+    publicPayload[0] = 0x30; // 'G' version byte (6 << 3)
+    publicPayload.set(publicBytes, 1);
+
+    return {
+      publicKey: "G" + toBase32(publicPayload).slice(1, 56),
+      secretKey: "S" + toBase32(secretPayload).slice(1, 56),
+    };
+  } catch (err) {
+    if (err instanceof WalletCreationError) throw err;
+    throw classifyError(err);
+  }
 }
 
 // ─── Freighter detection ───────────────────────────────────────────────────────
@@ -167,10 +243,12 @@ export async function connectFreighter(): Promise<string | null> {
  * Fund a new Stellar testnet account via Friendbot.
  * This activates the account with 10,000 XLM on testnet.
  * On mainnet, the platform would sponsor account creation via a server transaction.
+ *
+ * Throws if called on mainnet — use a server-side sponsorship flow instead.
  */
 export async function fundTestnetAccount(publicKey: string): Promise<boolean> {
   try {
-    const { friendbotUrl } = STELLAR_NETWORKS.testnet;
+    const { friendbotUrl } = NETWORK_CONFIGS.testnet;
     if (!friendbotUrl) return false;
     const res = await fetch(`${friendbotUrl}?addr=${encodeURIComponent(publicKey)}`);
     return res.ok;
@@ -187,13 +265,18 @@ export async function fundTestnetAccount(publicKey: string): Promise<boolean> {
  * Called automatically on email signup — the user never sees this flow.
  * If a wallet already exists for the userId, it is returned without creating a new one.
  *
+ * The `network` parameter defaults to the value of the
+ * NEXT_PUBLIC_STELLAR_NETWORK environment variable ("testnet" unless overridden
+ * to "mainnet").  Pass an explicit value only when you need to override the
+ * environment setting (e.g. in tests).
+ *
  * @param userId   - The user's ID from the auth system
- * @param network  - "testnet" (default) or "mainnet"
- * @param fund     - Whether to fund the account via Friendbot (testnet only)
+ * @param network  - "testnet" | "mainnet" — defaults to NEXT_PUBLIC_STELLAR_NETWORK
+ * @param fund     - Whether to fund the account via Friendbot (testnet only, no-op on mainnet)
  */
 export async function createEmbeddedWallet(
   userId: string,
-  network: StellarNetwork = "testnet",
+  network: StellarNetwork = STELLAR_NETWORK,
   fund = true
 ): Promise<WalletCreationResult> {
   // Return existing wallet if already created
@@ -225,7 +308,9 @@ export async function createEmbeddedWallet(
     walletType: "embedded",
   });
 
-  // Fund on testnet (fire-and-forget — don't block signup on this)
+  // Fund on testnet via Friendbot (fire-and-forget — don't block signup on this).
+  // On mainnet, account activation requires a server-side sponsorship transaction;
+  // isActivated will remain false until the platform funds the account externally.
   let isActivated = false;
   if (fund && network === "testnet") {
     isActivated = await fundTestnetAccount(publicKey);
