@@ -12,7 +12,8 @@
  */
 
 import React, { useState } from "react";
-import { Wallet, Copy, CheckCheck, RefreshCw, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
+import { Wallet, Copy, CheckCheck, RefreshCw, ExternalLink, AlertCircle, Loader2, QrCode, Download } from "lucide-react";
+import QRCode from "qrcode";
 import { useEmbeddedWallet } from "@/components/EmbeddedWalletProvider";
 import { truncateStellarAddress } from "@/app/lib/embeddedWallet";
 import { useAuth } from "@/components/AuthProvider";
@@ -22,6 +23,9 @@ export default function WalletStatusCard() {
   const { user } = useAuth();
   const { wallet, isCreating, error, initWallet, clearError } = useEmbeddedWallet();
   const [copied, setCopied] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [qrSrc, setQrSrc] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const { showToast } = useToast();
 
   // Prefer live wallet state; fall back to user record (persisted across refreshes)
@@ -40,6 +44,25 @@ export default function WalletStatusCard() {
   const handleCreate = async () => {
     if (!user) return;
     await initWallet(user.id, "testnet");
+  };
+
+  const generateQr = async () => {
+    if (!publicKey) return;
+    setQrLoading(true);
+    try {
+      const src = await QRCode.toDataURL(publicKey, { width: 600, margin: 2 });
+      setQrSrc(src);
+    } catch (e) {
+      showToast("Failed to generate QR code", "error");
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const handleToggleQr = async () => {
+    if (!publicKey) return;
+    if (!qrSrc) await generateQr();
+    setShowQR((s) => !s);
   };
 
   const horizonUrl = network === "testnet"
@@ -122,8 +145,51 @@ export default function WalletStatusCard() {
             >
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
             </a>
+            <button
+              onClick={handleToggleQr}
+              title="Show QR code"
+              aria-expanded={showQR}
+              className="p-2 rounded-[8px] bg-[#131A17] border border-[#1E2A24] text-[#5A6F65] hover:text-brand hover:border-brand/30 transition-all"
+            >
+              {qrLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <QrCode className="w-3.5 h-3.5" aria-hidden="true" />}
+            </button>
           </div>
         </div>
+        {showQR && (
+          <div className="mt-3 bg-[#08100E] border border-[#122017] rounded-[12px] p-3 flex flex-col items-center gap-3">
+            {qrSrc ? (
+              <>
+                <img src={qrSrc} alt="Wallet QR code" className="w-40 h-40" />
+                <div className="flex items-center gap-2">
+                  <a
+                    href={qrSrc}
+                    download={`wallet-${truncateStellarAddress(publicKey)}.png`}
+                    className="p-2 rounded-[8px] bg-[#131A17] border border-[#1E2A24] text-[#5A6F65] hover:text-brand hover:border-brand/30 transition-all"
+                    title="Download QR code"
+                  >
+                    <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                  </a>
+                  <button
+                    onClick={async () => { await navigator.clipboard.writeText(publicKey); showToast("Wallet address copied to clipboard", "success"); }}
+                    className="p-2 rounded-[8px] bg-[#131A17] border border-[#1E2A24] text-[#5A6F65] hover:text-brand hover:border-brand/30 transition-all"
+                    title="Copy address"
+                  >
+                    <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    onClick={() => setShowQR(false)}
+                    className="p-2 rounded-[8px] bg-[#131A17] border border-[#1E2A24] text-[#5A6F65] hover:text-brand hover:border-brand/30 transition-all"
+                    title="Close QR"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-[12px] text-[#8FA08E]">Generating QR…</div>
+            )}
+          </div>
+        )}
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-[13px] text-[#5A6F65] leading-relaxed">
