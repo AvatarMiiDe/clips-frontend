@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ArrowDownLeft, ArrowUpRight, Loader2, RefreshCw, ExternalLink, FlaskConical, Copy, Check } from "lucide-react";
 import { getStellarLabUrl } from "@/app/lib/networkConfig";
 import { useToast } from "@/hooks/useToast";
+import { formatTransactionAmount } from "@/app/lib/formatAmount";
 
 export interface Transaction {
   id: string;
@@ -199,7 +200,7 @@ export default function TransactionHistory({
                 }`}
               >
                 {tx.type === "received" ? "+" : "-"}
-                {parseFloat(tx.amount).toFixed(2)} {tx.asset}
+                {formatTransactionAmount(tx.amount, tx.asset, 2)}
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
