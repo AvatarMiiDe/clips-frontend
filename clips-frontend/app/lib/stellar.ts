@@ -1,4 +1,5 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import * as bip39 from "bip39";
 import {
   STELLAR_NETWORK,
   getHorizonUrl,
@@ -6,7 +7,12 @@ import {
   getFriendbotUrl,
 } from "./networkConfig";
 import type { StellarOperation } from "./stellarOperations";
-import { validateOperations } from "./stellarOperations";
+import {
+  validateOperations,
+  invokeContractBuildError,
+  isInvokeContractBuildError,
+  type InvokeContractBuildError,
+} from "./stellarOperations";
 
 // Re-export so existing callers that import these from stellar.ts keep working.
 export { STELLAR_NETWORK };
@@ -19,34 +25,22 @@ export const getStellarServer = () => {
   return new StellarSdk.Horizon.Server(HORIZON_URL);
 };
 
-// Simplified BIP39 word list for generating a 12-word mnemonic phrase
-const WORD_LIST = [
-  "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse",
-  "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act",
-  "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit",
-  "adult", "advance", "advice", "advise", "aerobic", "affair", "afford", "afraid", "again", "age",
-  "agent", "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol",
-  "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also",
-  "alter", "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient"
-];
+export const BIP39_WORDLIST = bip39.wordlists.english;
 
-// Hash a string deterministically to a 32-byte seed
-export const deriveSeedFromMnemonic = async (mnemonic: string): Promise<Uint8Array> => {
+export const deriveSeedFromMnemonic = async (
+  mnemonic: string,
+  passphrase = ""
+): Promise<Uint8Array> => {
   const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, " ");
-  // Using Web Crypto API for SHA-256
-  const encoder = new TextEncoder();
-  const data = encoder.encode(normalized);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return new Uint8Array(hashBuffer);
+  if (!bip39.validateMnemonic(normalized, BIP39_WORDLIST)) {
+    throw new Error("Invalid BIP39 mnemonic phrase");
+  }
+  const seed = await bip39.mnemonicToSeed(normalized, passphrase);
+  return seed.subarray(0, 32);
 };
 
-export const generateMnemonic = (): string => {
-  const words: string[] = [];
-  for (let i = 0; i < 12; i++) {
-    const randomIndex = Math.floor(Math.random() * WORD_LIST.length);
-    words.push(WORD_LIST[randomIndex]);
-  }
-  return words.join(" ");
+export const generateMnemonic = (strength = 128): string => {
+  return bip39.generateMnemonic(strength, undefined, BIP39_WORDLIST);
 };
 
 export interface StellarWalletData {
@@ -176,7 +170,9 @@ export const submitTransaction = async (signedTx: StellarSdk.Transaction) => {
  * Convert a typed `StellarOperation` descriptor into a real Stellar SDK
  * `xdr.Operation` object.
  */
-function toSdkOperation(op: StellarOperation): StellarSdk.xdr.Operation {
+function toSdkOperation(
+  op: StellarOperation
+): StellarSdk.xdr.Operation | InvokeContractBuildError {
   switch (op.type) {
     case "payment": {
       const asset =
@@ -264,14 +260,19 @@ function toSdkOperation(op: StellarOperation): StellarSdk.xdr.Operation {
       return StellarSdk.Operation.setOptions(opts);
     }
 
+    case "begin_sponsoring_future_reserves":
+      return StellarSdk.Operation.beginSponsoringFutureReserves({
+        sponsoredId: op.sponsoredId,
+        ...(op.source ? { source: op.source } : {}),
+      });
+
+    case "end_sponsoring_future_reserves":
+      return StellarSdk.Operation.endSponsoringFutureReserves({
+        ...(op.source ? { source: op.source } : {}),
+      });
+
     case "invoke_contract":
-      // Soroban contract invocations require the Soroban RPC path and a
-      // SorobanDataBuilder — this stub builds a placeholder operation.
-      // Replace with a full Soroban client call in production.
-      throw new Error(
-        "invoke_contract operations must be built via the Soroban RPC client. " +
-          "Use SorobanRpc.Server and assembleTransaction() before calling submitTransaction()."
-      );
+      return invokeContractBuildError();
 
     default: {
       const _exhaustive: never = op;
@@ -288,6 +289,12 @@ export interface BatchTransactionResult {
   /** Number of operations in the transaction */
   operationCount: number;
 }
+
+export type BuildBatchTransactionResult =
+  | ({ ok: true } & BatchTransactionResult)
+  | { ok: false; error: InvokeContractBuildError; operationIndex: number };
+
+export { isInvokeContractBuildError, type InvokeContractBuildError };
 
 /**
  * Build a multi-operation Stellar transaction and return the unsigned XDR.
@@ -314,7 +321,7 @@ export const buildBatchTransaction = async (
     memo?: string;
     timeoutSeconds?: number;
   } = {}
-): Promise<BatchTransactionResult> => {
+): Promise<BuildBatchTransactionResult> => {
   const { memo, timeoutSeconds = 30 } = options;
 
   // Validate before touching the network
@@ -349,8 +356,12 @@ export const buildBatchTransaction = async (
     networkPassphrase: NETWORK_PASSPHRASE,
   });
 
-  for (const op of operations) {
-    builder.addOperation(toSdkOperation(op));
+  for (let i = 0; i < operations.length; i++) {
+    const sdkOp = toSdkOperation(operations[i]);
+    if (isInvokeContractBuildError(sdkOp)) {
+      return { ok: false, error: sdkOp, operationIndex: i };
+    }
+    builder.addOperation(sdkOp);
   }
 
   if (memo) {
@@ -360,6 +371,7 @@ export const buildBatchTransaction = async (
   const transaction = builder.setTimeout(timeoutSeconds).build();
 
   return {
+    ok: true,
     xdr: transaction.toEnvelope().toXDR("base64"),
     feeStroops: totalFee,
     operationCount: operations.length,

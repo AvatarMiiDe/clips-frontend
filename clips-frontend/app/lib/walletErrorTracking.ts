@@ -1,3 +1,5 @@
+import { sanitizeBreadcrumbPayload } from "@/app/lib/sentryRedaction";
+
 /**
  * Wallet Error Tracking Utility
  * 
@@ -171,17 +173,8 @@ export function addWalletBreadcrumb(
   category: string = "wallet",
   data?: any
 ): void {
-  const breadcrumbData: any = { ...data };
+  const breadcrumbData = sanitizeBreadcrumbPayload(data);
 
-  // Redact sensitive data
-  if (data?.walletAddress) {
-    breadcrumbData.walletAddress = redactAddress(data.walletAddress);
-  }
-  if (data?.publicKey) {
-    breadcrumbData.publicKey = redactAddress(data.publicKey);
-  }
-
-  // Log to console
   console.log(`[Wallet Breadcrumb] ${category}: ${message}`, breadcrumbData);
 
   // Add to Sentry if available

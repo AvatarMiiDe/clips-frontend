@@ -6,7 +6,7 @@ import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import { useWallet } from "@/components/WalletProvider";
 import SocialRecoveryConfig from "@/components/SocialRecoveryConfig";
 import WalletConnectButton from "@/components/WalletConnectButton";
-import { Bell, BellOff, Check, X, Key, Wallet, Shield, Copy, Eye, EyeOff, Globe } from "lucide-react";
+import { Bell, BellOff, Check, X, Key, Wallet, Shield, Copy, Eye, EyeOff, Globe, Moon, Sun } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import {
@@ -17,9 +17,11 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import Skeleton from "@/components/ui/Skeleton";
 import TrustlineManager from "@/components/wallet/TrustlineManager";
+import { useTheme } from "@/components/theme-provider";
 
 export default function SettingsPage() {
   const { showToast } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [permission, setPermission] = useState<"granted" | "denied" | "default">("default");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -264,6 +266,39 @@ export default function SettingsPage() {
                   </div>
 
                   <LocaleSwitcher />
+                </div>
+              </div>
+
+              {/* Theme Toggle */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-extrabold text-white">Appearance</h2>
+
+                <div className="bg-surface border border-white/5 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center text-brand shrink-0">
+                      {theme === 'dark' ? <Moon className="w-6 h-6" /> : <Sun className="w-6 h-6" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-white">Dark Mode</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Switch between light and dark themes
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={toggleTheme}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                      theme === 'dark' ? "bg-brand" : "bg-white/10"
+                    }`}
+                    aria-label="Toggle Dark Mode"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        theme === 'dark' ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 

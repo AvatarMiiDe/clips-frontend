@@ -1,10 +1,23 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { User } from "../app/lib/mockApi";
 import { useRouter, usePathname } from "next/navigation";
 import { useUserStore, useDashboardStore, useEarningsStore } from "@/app/store";
 import { useSession, signOut } from "next-auth/react";
+import { getAuthRedirectTarget } from "@/app/lib/authRedirect";
+import {
+  mapSessionToUser,
+  persistClipcashUser,
+  clearClipcashUser,
+} from "@/app/lib/authUser";
 
 interface AuthContextType {
   user: User | null;
@@ -22,125 +35,118 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+type AuthSource = "session" | "mock" | null;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const authSourceRef = useRef<AuthSource>(null);
+  const syncedSessionEmailRef = useRef<string | null>(null);
+  const pendingRedirectRef = useRef<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const setProfile = useUserStore((state) => state.setProfile);
   const clearUser = useUserStore((state) => state.clearUser);
   const { data: session, status } = useSession();
 
-  // Load initial auth state on mount
-  useEffect(() => {
-    const stored = localStorage.getItem("clipcash_user");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setUserState(parsed);
-      } catch (e) {
-        console.error("Failed to parse stored user", e);
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (isLoading) return;
-
-  const protectedRoutes = [
-    "/dashboard",
-    "/onboarding",
-    "/earnings",
-    "/projects",
-    "/vault",
-    "/platforms",
-    "/clips",
-  ];
-
-  const isProtectedRoute = protectedRoutes.some(route =>
-    pathname.startsWith(route)
-  );
-
-  const isAuthRoute = pathname === "/login" || pathname === "/signup";
-
-  // 🔐 Not logged in → block protected pages
-  if (!user && isProtectedRoute) {
-    router.push("/login");
-    return;
-  }
-
-  // 🔓 Logged in → prevent going back to auth pages
-  if (user && isAuthRoute) {
-    if (user.onboardingStep === 1 || user.onboardingStep === 2) {
-      router.push("/onboarding");
-    } else {
-      router.push("/dashboard");
-    }
-    return;
-  }
-
-  // 🚫 Prevent accessing onboarding after completion
-  if (user && pathname === "/onboarding" && user.onboardingStep > 2) {
-    router.push("/dashboard");
-  }
-
-}, [user, isLoading, pathname, router]);
-
-  const setUser = (newUser: User | null) => {
-    setUserState(newUser);
-    if (newUser) {
-      localStorage.setItem("clipcash_user", JSON.stringify(newUser));
-      // Sync the authenticated user to useUserStore
-      const userProfile = {
-        id: newUser.id,
-        name: newUser.name || newUser.username || "User",
-        email: newUser.email,
+  const syncUserProfile = useCallback(
+    (nextUser: User) => {
+      setProfile({
+        id: nextUser.id,
+        name: nextUser.name || nextUser.username || "User",
+        email: nextUser.email,
         avatarUrl: null,
         plan: "pro" as const,
         planUsagePercent: 80,
-      };
-      setProfile(userProfile);
-      // Kick off background prefetch so data is ready when user lands on dashboard/earnings
+      });
       useDashboardStore.getState().fetchDashboard();
       useEarningsStore.getState().fetchEarnings();
+    },
+    [setProfile]
+  );
+
+  const clearAuthState = useCallback(() => {
+    authSourceRef.current = null;
+    syncedSessionEmailRef.current = null;
+    setUserState(null);
+    clearClipcashUser();
+    clearUser();
+  }, [clearUser]);
+
+  useEffect(() => {
+    if (status === "loading") {
+      setIsLoading(true);
+      return;
+    }
+
+    if (status === "authenticated" && session?.user?.email) {
+      const sessionEmail = session.user.email;
+      if (
+        authSourceRef.current !== "session" ||
+        syncedSessionEmailRef.current !== sessionEmail
+      ) {
+        authSourceRef.current = "session";
+        syncedSessionEmailRef.current = sessionEmail;
+        const nextUser = mapSessionToUser(session);
+        setUserState(nextUser);
+        persistClipcashUser(nextUser);
+        syncUserProfile(nextUser);
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    if (status === "unauthenticated") {
+      syncedSessionEmailRef.current = null;
+      if (authSourceRef.current === "session") {
+        clearAuthState();
+        void signOut({ redirect: false });
+      }
+    }
+
+    setIsLoading(false);
+  }, [session, status, clearAuthState, syncUserProfile]);
+
+  useEffect(() => {
+    const redirectTo = getAuthRedirectTarget({
+      pathname,
+      user,
+      isAuthReady: !isLoading && status !== "loading",
+    });
+
+    if (!redirectTo || redirectTo === pathname) {
+      pendingRedirectRef.current = null;
+      return;
+    }
+
+    if (pendingRedirectRef.current === redirectTo) {
+      return;
+    }
+
+    pendingRedirectRef.current = redirectTo;
+    router.push(redirectTo);
+  }, [user, isLoading, status, pathname, router]);
+
+  const setUser = (newUser: User | null) => {
+    if (newUser) {
+      const { password: _password, ...safeUser } = newUser as User & {
+        password?: string;
+      };
+      void _password;
+      authSourceRef.current = "mock";
+      syncedSessionEmailRef.current = null;
+      setUserState(safeUser as User);
+      persistClipcashUser(safeUser as User);
+      syncUserProfile(safeUser as User);
     } else {
-      localStorage.removeItem("clipcash_user");
-      clearUser();
+      clearAuthState();
     }
   };
 
   const logout = () => {
     signOut({ callbackUrl: "/login" });
-    setUser(null);
+    clearAuthState();
   };
-
-  // Basic routing logic based on auth state
-  useEffect(() => {
-    if (isLoading || status === "loading") return;
-
-    const protectedRoutes = ["/dashboard", "/onboarding", "/earnings", "/projects", "/vault", "/platforms", "/clips"];
-    const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
-    const isAuthRoute = pathname === "/login" || pathname === "/signup";
-
-    if (user || session) {
-      if (isAuthRoute || pathname === "/") {
-        if (user?.onboardingStep === 1 || user?.onboardingStep === 2) {
-          router.push("/onboarding");
-        } else {
-          router.push("/dashboard");
-        }
-      } else if (pathname === "/onboarding") {
-        if (user?.onboardingStep && user.onboardingStep > 2) {
-          router.push("/dashboard");
-        }
-      }
-    } else {
-      if (isProtectedRoute) {
-        router.push("/login");
-      }
-    }
-  }, [user, session, isLoading, status, pathname, router]);
 
   return (
     <AuthContext.Provider value={{ user, setUser, logout, isLoading }}>

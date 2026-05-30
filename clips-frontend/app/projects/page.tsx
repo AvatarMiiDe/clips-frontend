@@ -15,29 +15,14 @@ import { useEffect } from "react";
 
 const RECOMMENDATION_THRESHOLD = 90;
 
-const generateMockClips = (count: number) => {
-  const styles = ["Bold & Dynamic", "Minimalist", "Emoji-Rich", "Subtitles Only"];
-  const statuses = ["pending", "listed", "history"];
-  const scoreKeys = ["high", "medium", "low"];
-  const clips = [];
-  for (let i = 1; i <= count; i++) {
-    const score = Math.floor(Math.random() * 100);
-    let scoreKey = score >= 70 ? "high" : score >= 40 ? "medium" : "low";
-    clips.push({
-      id: String(i),
-      title: `Clip #${String(i).padStart(2, "0")} - ${["The Big Reveal Hook", "Technical Deep Dive", "Audience Reaction", "Feature Walkthrough", "Closing Remarks"][i % 5]}`,
-      thumbnail: `/projects/thumb${(i % 3) + 1}.png`,
-      score,
-      scoreKey,
-      duration: `00:${String(20 + Math.floor(Math.random() * 40)).padStart(2, "0")}`,
-      style: styles[i % styles.length],
-      status: statuses[i % statuses.length],
-    });
-  }
-  return clips;
-};
-
-const mockClips = generateMockClips(142);
+const mockClips = [
+  { id: "1", title: "Clip #01 - The Big Reveal Hook", thumbnail: "/projects/thumb1.png", score: 94, scoreKey: "high", duration: "00:45", style: "Bold & Dynamic", status: "pending", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" },
+  { id: "2", title: "Clip #02 - Technical Deep Dive", thumbnail: "/projects/thumb2.png", score: 68, scoreKey: "medium", duration: "00:58", style: "Minimalist", status: "listed", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" },
+  { id: "3", title: "Clip #03 - Audience Reaction", thumbnail: "/projects/thumb3.png", score: 82, scoreKey: "high", duration: "00:32", style: "Emoji-Rich", status: "pending", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" },
+  { id: "4", title: "Clip #04 - Feature Walkthrough", thumbnail: "/projects/thumb1.png", score: 91, scoreKey: "high", duration: "00:52", style: "Subtitles Only", status: "history", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4" },
+  { id: "5", title: "Clip #05 - Closing Remarks", thumbnail: "/projects/thumb2.png", score: 42, scoreKey: "low", duration: "01:12", style: "Minimalist", status: "pending", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4" },
+  { id: "6", title: "Clip #06 - Product Detail B-Roll", thumbnail: "/projects/thumb3.png", score: 89, scoreKey: "high", duration: "00:44", style: "Bold & Dynamic", status: "listed", resolution: "1080x1920", videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4" },
+];
 
 export default function ProjectsPage() {
   const { showToast, ToastEl } = useToast();

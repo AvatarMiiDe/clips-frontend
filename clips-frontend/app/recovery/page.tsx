@@ -40,6 +40,8 @@ export default function RecoveryPage() {
   const [socialEmail, setSocialEmail] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [guardians, setGuardians] = useState<{ email: string; approved: boolean }[]>([]);
+  const [recoveryThreshold, setRecoveryThreshold] = useState(2);
+  const [recoveryGuardianCount, setRecoveryGuardianCount] = useState(0);
   const [isRecoverable, setIsRecoverable] = useState(false);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [simulating, setSimulating] = useState(false);
@@ -120,6 +122,8 @@ export default function RecoveryPage() {
       const res = await MockApi.initiateSocialRecovery(socialEmail);
       setSessionId(res.sessionId);
       setGuardians(res.guardians.map((g: string) => ({ email: g, approved: false })));
+      setRecoveryThreshold(res.threshold);
+      setRecoveryGuardianCount(res.guardianCount);
       setIsRecoverable(false);
     } catch (err: any) {
       setError(err.message || "Failed to find social recovery setup for this email.");
@@ -137,12 +141,21 @@ export default function RecoveryPage() {
       // Simulate Guardian 1 approving
       await new Promise((r) => setTimeout(r, 1000));
       let res = await MockApi.approveGuardian(sessionId, guardians[0].email);
-      setGuardians(res.guardians);
+      setGuardians(
+        res.guardians.map((g: { email: string; approved: boolean }) => ({
+          email: g.email,
+          approved: g.approved,
+        }))
+      );
 
-      // Simulate Guardian 2 approving (reaches threshold: 2/3)
       await new Promise((r) => setTimeout(r, 1200));
       res = await MockApi.approveGuardian(sessionId, guardians[1].email);
-      setGuardians(res.guardians);
+      setGuardians(
+        res.guardians.map((g: { email: string; approved: boolean }) => ({
+          email: g.email,
+          approved: g.approved,
+        }))
+      );
 
       // Verify recovery capability
       const status = await MockApi.checkSocialRecovery(sessionId);
@@ -389,7 +402,8 @@ export default function RecoveryPage() {
                         <Users className="w-3.5 h-3.5 text-brand" /> Guardian Approvals
                       </span>
                       <span className="text-[10px] font-mono text-brand font-bold bg-brand/10 border border-brand/20 px-2.5 py-0.5 rounded-full">
-                        {guardians.filter((g) => g.approved).length} / {guardians.length} Approved
+                        {guardians.filter((g) => g.approved).length} / {recoveryThreshold} required (
+                        {recoveryThreshold}-of-{recoveryGuardianCount})
                       </span>
                     </div>
 

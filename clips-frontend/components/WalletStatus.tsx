@@ -166,7 +166,7 @@ export default function WalletStatus() {
                 href={stellarExpertAccountUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[12px] font-semibold text-brand hover:bg-white/10 transition-colors"
+                className="inline-flex items-center justify-center gap-1 rounded-xl border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-brand hover:bg-surface-hover transition-colors"
                 title="View account on Stellar Expert"
               >
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
@@ -176,7 +176,7 @@ export default function WalletStatus() {
                 href={stellarScanAccountUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[12px] font-semibold text-muted hover:text-white hover:bg-white/10 transition-colors"
+                className="inline-flex items-center justify-center gap-1 rounded-xl border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-muted hover:text-white hover:bg-surface-hover transition-colors"
                 title="View account on StellarScan"
               >
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
@@ -211,7 +211,7 @@ export default function WalletStatus() {
           <button
             onClick={handleDisconnect}
             role="menuitem"
-            className="w-full flex items-center gap-2 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-3 text-[13px] text-error hover:bg-error/10 transition-colors"
             aria-label="Disconnect wallet"
           >
             <LogOut className="w-4 h-4" aria-hidden="true" />

@@ -1,6 +1,10 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useStellarTransaction } from "./useStellarTransaction";
 
+jest.mock("@/app/lib/sentry", () => ({
+  captureSorobanNotSupportedWarning: jest.fn(),
+}));
+
 // Mock Freighter wallet
 const mockFreighter = {
   isConnected: jest.fn(),
@@ -369,6 +373,8 @@ import {
   createPaymentOp,
   createChangeTrustOp,
   createManageSellOfferOp,
+  createInvokeContractOp,
+  INVOKE_CONTRACT_USER_MESSAGE,
 } from "../lib/stellarOperations";
 
 describe("useStellarTransaction — batch operations", () => {
@@ -697,6 +703,26 @@ describe("useStellarTransaction — batch operations", () => {
 
       expect(result.current.status).toBe("success");
       expect(buildBatch).toHaveBeenCalledWith([trustlineOp, paymentOp]);
+    });
+
+    it("should surface a friendly error for invoke_contract batches", async () => {
+      const { result } = renderHook(() => useStellarTransaction());
+
+      act(() => {
+        result.current.addOperation(
+          createInvokeContractOp({ contractId: "CABC", method: "mint" })
+        );
+      });
+
+      const buildBatch = jest.fn();
+
+      await act(async () => {
+        await result.current.executeBatchTransaction(buildBatch);
+      });
+
+      expect(result.current.status).toBe("error");
+      expect(result.current.error?.message).toBe(INVOKE_CONTRACT_USER_MESSAGE);
+      expect(buildBatch).not.toHaveBeenCalled();
     });
 
     it("should sign the batch XDR with the correct network", async () => {

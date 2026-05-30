@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## Security Guidelines
 - **Sanitization**: All user-controlled strings reflected in the UI must be sanitized using the `sanitize` utility in `@/app/lib/sanitize.ts` to prevent XSS attacks.
 - **dangerousSetInnerHTML**: Never use `dangerouslySetInnerHTML` without explicit sanitization from a trusted library like DOMPurify.
+
+## Component Demos
+- Do not add public App Router pages for internal component demos. Use Storybook (`npm run storybook`) as the canonical demo environment.
+- Any dev-only demo routes must return 404 in production (`NODE_ENV === "production"`).

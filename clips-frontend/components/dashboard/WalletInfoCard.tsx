@@ -33,7 +33,7 @@ export default function WalletInfoCard() {
   const successId = React.useId();
 
   const xlmDisplay = balance
-    ? `${parseFloat(balance.xlm).toLocaleString(undefined, { maximumFractionDigits: 2 })} XLM`
+    ? formatXLM(balance.xlm, { decimals: 2, includeCurrency: true })
     : status === "loading"
     ? "Loading…"
     : "— XLM";
@@ -141,7 +141,7 @@ export default function WalletInfoCard() {
 
       {/* USD sub-value */}
       {balance && (
-        <p className="text-muted text-[13px] mb-5">≈ ${parseFloat(balance.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })} USD</p>
+        <p className="text-muted text-[13px] mb-5">≈ {formatUSD(balance.usd, { currencyFormat: 'symbol' })}</p>
       )}
 
       {/* Send button */}
@@ -149,7 +149,7 @@ export default function WalletInfoCard() {
         <button
           onClick={() => setSendOpen(true)}
           aria-label="Open send XLM form"
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand/10 hover:bg-brand/20 border border-brand/30 text-brand font-bold text-[13px] transition-all"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover border border-brand/30 text-black font-bold text-[13px] transition-all"
         >
           <Send className="w-4 h-4" aria-hidden="true" />
           Send XLM

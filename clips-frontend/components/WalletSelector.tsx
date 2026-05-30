@@ -271,7 +271,7 @@ export default function WalletSelector({
               className={`p-4 rounded-xl border transition-all ${
                 activeWallet?.id === wallet.id
                   ? "bg-brand/10 border-brand/30"
-                  : "bg-surface-hover border-border"
+                  : "bg-surface border-border"
               }`}
             >
               <div className="flex items-start justify-between gap-3">

@@ -1,12 +1,18 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useBalance, getBalance } from "./useBalance";
+import {
+  useBalance,
+  getBalance,
+  fetchXLMPrice,
+  resetXlmPriceCache,
+  configureXlmPriceCacheTtl,
+} from "./useBalance";
 
-// Mock fetch
 global.fetch = jest.fn();
 
 describe("getBalance", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetXlmPriceCache();
   });
 
   it("should fetch balance successfully from testnet", async () => {
@@ -146,14 +152,75 @@ describe("getBalance", () => {
 
     const balance = await getBalance("GTEST123", "TESTNET");
 
-    // Should use fallback price of 0.12
     expect(balance.usd).toBe("12.00");
+    expect(balance.isPriceStale).toBe(true);
+  });
+});
+
+describe("fetchXLMPrice caching", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetXlmPriceCache();
+    configureXlmPriceCacheTtl(300_000);
+  });
+
+  it("shares cached price across concurrent callers", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ stellar: { usd: 0.25 } }),
+    });
+
+    const [first, second] = await Promise.all([fetchXLMPrice(), fetchXLMPrice()]);
+
+    expect(first).toEqual({ price: 0.25, isStale: false });
+    expect(second).toEqual({ price: 0.25, isStale: false });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns cached price without refetching within TTL", async () => {
+    configureXlmPriceCacheTtl(60_000);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ stellar: { usd: 0.18 } }),
+    });
+
+    await fetchXLMPrice();
+    const cached = await fetchXLMPrice();
+
+    expect(cached).toEqual({ price: 0.18, isStale: false });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to last known price on HTTP 429 with stale flag", async () => {
+    jest.useFakeTimers();
+    configureXlmPriceCacheTtl(1_000);
+
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ stellar: { usd: 0.14 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+      });
+
+    await fetchXLMPrice();
+    jest.advanceTimersByTime(2_000);
+
+    const result = await fetchXLMPrice();
+
+    expect(result).toEqual({ price: 0.14, isStale: true });
+    jest.useRealTimers();
   });
 });
 
 describe("useBalance", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetXlmPriceCache();
     jest.useFakeTimers();
   });
 

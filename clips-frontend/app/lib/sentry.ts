@@ -7,6 +7,16 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useAuth } from "@/components/AuthProvider";
+import {
+  redactAddress,
+  redactEmail,
+  sanitizeBreadcrumbPayload,
+  sanitizeSentryContexts,
+} from "@/app/lib/sentryRedaction";
+import {
+  INVOKE_CONTRACT_NOT_SUPPORTED_CODE,
+  INVOKE_CONTRACT_USER_MESSAGE,
+} from "@/app/lib/stellarOperations";
 
 // Sentry DSN from environment variables
 const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
@@ -44,7 +54,7 @@ export function initSentry() {
       
       // Sanitize wallet addresses and keys
       if (event.contexts) {
-        sanitizeContext(event.contexts);
+        sanitizeSentryContexts(event.contexts);
       }
       
       return event;
@@ -86,46 +96,15 @@ export function initSentry() {
   });
 }
 
-/**
- * Sanitize context to remove PII
- */
-function sanitizeContext(contexts: any) {
-  for (const key in contexts) {
-    if (typeof contexts[key] === "object" && contexts[key] !== null) {
-      const obj = contexts[key];
-      
-      // Redact wallet addresses
-      if (obj.wallet_address) {
-        obj.wallet_address = redactAddress(obj.wallet_address);
-      }
-      if (obj.public_key) {
-        obj.public_key = redactAddress(obj.public_key);
-      }
-      if (obj.address) {
-        obj.address = redactAddress(obj.address);
-      }
-      
-      // Redact secret keys
-      if (obj.secret_key) {
-        obj.secret_key = "[REDACTED]";
-      }
-      if (obj.private_key) {
-        obj.private_key = "[REDACTED]";
-      }
-      if (obj.mnemonic) {
-        obj.mnemonic = "[REDACTED]";
-      }
-    }
-  }
-}
-
-/**
- * Redact wallet address for logging (show first 6 and last 4 characters)
- */
-function redactAddress(address: string): string {
-  if (!address || typeof address !== "string") return "[REDACTED]";
-  if (address.length < 10) return "[REDACTED]";
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+export function captureSorobanNotSupportedWarning(context?: Record<string, unknown>) {
+  Sentry.captureMessage(INVOKE_CONTRACT_USER_MESSAGE, {
+    level: "warning",
+    tags: {
+      stellar_operation: "invoke_contract",
+      error_code: INVOKE_CONTRACT_NOT_SUPPORTED_CODE,
+    },
+    extra: context,
+  });
 }
 
 /**
@@ -141,15 +120,6 @@ export function setSentryUser(user: { id: string; email?: string } | null) {
     id: user.id,
     email: user.email ? redactEmail(user.email) : undefined,
   });
-}
-
-/**
- * Redact email for logging
- */
-function redactEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!domain) return "[REDACTED]";
-  return `${local[0]}***@${domain}`;
 }
 
 /**
@@ -238,15 +208,7 @@ export function addWalletBreadcrumb(
   category: string = "wallet",
   data?: any
 ) {
-  const breadcrumbData: any = { ...data };
-
-  // Redact sensitive data
-  if (data?.walletAddress) {
-    breadcrumbData.walletAddress = redactAddress(data.walletAddress);
-  }
-  if (data?.publicKey) {
-    breadcrumbData.publicKey = redactAddress(data.publicKey);
-  }
+  const breadcrumbData = sanitizeBreadcrumbPayload(data);
 
   Sentry.addBreadcrumb({
     message,

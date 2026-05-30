@@ -76,10 +76,11 @@ export const decryptWithPassword = async (encryptedBase64: string, password: str
 };
 
 export default function SocialRecoveryConfig() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { isConnected, walletType, stellarMnemonic, stellarSecret } = useWallet();
 
   const [guardians, setGuardians] = useState<string[]>(["", "", ""]);
+  const [threshold, setThreshold] = useState(2);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -87,16 +88,11 @@ export default function SocialRecoveryConfig() {
 
   const isStellar = isConnected && walletType === "stellar";
 
-  // Pre-populate guardians from logged-in user if available
   useEffect(() => {
-    if (user && (user as any).guardians) {
-      const g = (user as any).guardians;
-      if (Array.isArray(g) && g.length > 0) {
-        // Pads array to at least 3 elements
-        const padded = [...g];
-        while (padded.length < 3) padded.push("");
-        setGuardians(padded);
-      }
+    if (user?.socialRecoveryGuardianCount && user.socialRecoveryGuardianCount > 0) {
+      const count = Math.max(user.socialRecoveryGuardianCount, 3);
+      setGuardians(Array.from({ length: count }, () => ""));
+      setThreshold(user.socialRecoveryThreshold ?? 2);
     }
   }, [user]);
 
@@ -129,6 +125,13 @@ export default function SocialRecoveryConfig() {
       return;
     }
 
+    if (threshold < 2 || threshold > activeGuardians.length) {
+      setError(
+        `Recovery threshold must be between 2 and ${activeGuardians.length} (you have ${activeGuardians.length} guardians).`
+      );
+      return;
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const g of activeGuardians) {
@@ -150,13 +153,17 @@ export default function SocialRecoveryConfig() {
 
       // 2. Save recovery configuration to backend
       if (user?.email) {
-        await MockApi.saveSocialRecoveryConfig(user.email, activeGuardians, cipherText);
-        
-        // Update local mock user reference
-        if ((user as any).guardians) {
-          (user as any).guardians = activeGuardians;
-          (user as any).encryptedWalletBackup = cipherText;
-        }
+        const saved = await MockApi.saveSocialRecoveryConfig(
+          user.email,
+          activeGuardians,
+          cipherText,
+          threshold
+        );
+        setUser({
+          ...user,
+          socialRecoveryThreshold: saved.threshold,
+          socialRecoveryGuardianCount: saved.guardianCount,
+        });
 
         setSuccess(true);
         setPassword("");
@@ -184,9 +191,9 @@ export default function SocialRecoveryConfig() {
         <div>
           <h3 className="text-[16px] font-extrabold text-white">Social Wallet Recovery</h3>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            Protect your assets by assigning trusted guardians (friends, family, or other email accounts).
-            If you ever lose access to your password, 2 out of 3 guardians can approve your recovery request
-            to restore your Stellar wallet keys.
+            Assign trusted guardians by email. Your wallet backup is split with Shamir secret sharing;
+            recovery requires approval from at least your chosen threshold of guardians, plus your
+            recovery password. Guardian invitations are sent by email (mocked in this environment).
           </p>
         </div>
       </div>
@@ -216,8 +223,38 @@ export default function SocialRecoveryConfig() {
               </div>
             ))}
             <span className="text-[10px] text-muted-foreground mt-1.5 block">
-              At least 2 guardians must be active to initiate a recovery request.
+              Configure at least 2 guardians. Each receives an email invitation with their secret share.
             </span>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold text-muted-foreground tracking-wider uppercase">
+              Recovery threshold (t-of-n)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={2}
+                max={Math.max(2, guardians.filter((g) => g.length > 0).length || 3)}
+                value={threshold}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  const activeCount = guardians.filter((g) => g.length > 0).length || 3;
+                  setThreshold(
+                    Math.min(Math.max(2, next), Math.max(2, activeCount))
+                  );
+                }}
+                className="w-20 bg-input border border-white/5 text-white focus:border-brand/40 rounded-xl px-3 py-2 text-xs focus:outline-none"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                Require{" "}
+                <strong className="text-white">{threshold}</strong> of{" "}
+                <strong className="text-white">
+                  {guardians.filter((g) => g.length > 0).length || "n"}
+                </strong>{" "}
+                guardians to approve recovery before your key can be restored.
+              </span>
+            </div>
           </div>
 
           <div className="h-px bg-white/5 my-4" />

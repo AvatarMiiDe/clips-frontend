@@ -104,6 +104,19 @@ export interface SetOptionsOperation {
   source?: string;
 }
 
+/** Begin sponsoring future reserves for another account */
+export interface BeginSponsoringFutureReservesOperation {
+  type: "begin_sponsoring_future_reserves";
+  sponsoredId: string;
+  source?: string;
+}
+
+/** End sponsoring future reserves */
+export interface EndSponsoringFutureReservesOperation {
+  type: "end_sponsoring_future_reserves";
+  source?: string;
+}
+
 /** Invoke a Soroban smart contract */
 export interface InvokeContractOperation {
   type: "invoke_contract";
@@ -114,6 +127,35 @@ export interface InvokeContractOperation {
   source?: string;
 }
 
+/** Soroban implementation plan: SOROBAN_SMART_WALLET_SPIKE.md */
+export const INVOKE_CONTRACT_NOT_SUPPORTED_CODE = "INVOKE_CONTRACT_NOT_SUPPORTED" as const;
+
+export const INVOKE_CONTRACT_USER_MESSAGE =
+  "Smart contract interactions are not yet supported" as const;
+
+export type InvokeContractBuildError = {
+  code: typeof INVOKE_CONTRACT_NOT_SUPPORTED_CODE;
+  message: typeof INVOKE_CONTRACT_USER_MESSAGE;
+};
+
+export function invokeContractBuildError(): InvokeContractBuildError {
+  return {
+    code: INVOKE_CONTRACT_NOT_SUPPORTED_CODE,
+    message: INVOKE_CONTRACT_USER_MESSAGE,
+  };
+}
+
+export function isInvokeContractBuildError(
+  value: unknown
+): value is InvokeContractBuildError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value as InvokeContractBuildError).code === INVOKE_CONTRACT_NOT_SUPPORTED_CODE
+  );
+}
+
 /** Union of all supported operation descriptors */
 export type StellarOperation =
   | PaymentOperation
@@ -122,6 +164,8 @@ export type StellarOperation =
   | ManageBuyOfferOperation
   | AccountMergeOperation
   | SetOptionsOperation
+  | BeginSponsoringFutureReservesOperation
+  | EndSponsoringFutureReservesOperation
   | InvokeContractOperation;
 
 // ─── Builder helpers ──────────────────────────────────────────────────────────
@@ -162,6 +206,18 @@ export function createSetOptionsOp(
   params: Omit<SetOptionsOperation, "type">
 ): SetOptionsOperation {
   return { type: "set_options", ...params };
+}
+
+export function createBeginSponsoringFutureReservesOp(
+  params: Omit<BeginSponsoringFutureReservesOperation, "type">
+): BeginSponsoringFutureReservesOperation {
+  return { type: "begin_sponsoring_future_reserves", ...params };
+}
+
+export function createEndSponsoringFutureReservesOp(
+  params: Omit<EndSponsoringFutureReservesOperation, "type"> = {}
+): EndSponsoringFutureReservesOperation {
+  return { type: "end_sponsoring_future_reserves", ...params };
 }
 
 export function createInvokeContractOp(
@@ -233,6 +289,28 @@ export function trustlineAndSellOffer(params: {
       amount: params.amount,
       price: params.price,
     }),
+  ];
+}
+
+/**
+ * Wraps a set of operations in sponsorship.
+ * The sponsor will pay the reserve requirements for any entries created
+ * (e.g. trustlines, offers, data entries) within the wrapped operations.
+ *
+ * @example
+ * const ops = sponsoredOperations(sponsorPublicKey, sponsoredPublicKey, [
+ *   createChangeTrustOp({ assetCode: "USDC", assetIssuer: "G..." })
+ * ]);
+ */
+export function sponsoredOperations(
+  sponsorId: string,
+  sponsoredId: string,
+  operations: StellarOperation[]
+): StellarOperation[] {
+  return [
+    createBeginSponsoringFutureReservesOp({ sponsoredId, source: sponsorId }),
+    ...operations,
+    createEndSponsoringFutureReservesOp({ source: sponsoredId }),
   ];
 }
 
@@ -316,6 +394,16 @@ export function validateOperations(operations: StellarOperation[]): void {
 
       case "set_options":
         // set_options has no required fields — all are optional
+        break;
+
+      case "begin_sponsoring_future_reserves":
+        if (!op.sponsoredId) {
+          throw new BatchValidationError(i, "begin_sponsoring_future_reserves requires a sponsoredId.");
+        }
+        break;
+
+      case "end_sponsoring_future_reserves":
+        // end_sponsoring_future_reserves has no required fields
         break;
 
       default: {
