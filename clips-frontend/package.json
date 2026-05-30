@@ -15,6 +15,8 @@
     "changeset": "changeset"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.55.0",
+    "@sentry/types": "^10.55.0",
     "@stellar/stellar-sdk": "^15.1.0",
     "bip39": "^3.1.0",
     "canvas-confetti": "^1.9.4",
@@ -24,6 +26,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "secrets.js-grempe": "^2.0.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

@@ -2,7 +2,13 @@
 
 import { useState, useCallback, useRef } from "react";
 import type { StellarOperation } from "@/app/lib/stellarOperations";
-import { validateOperations, BatchValidationError } from "@/app/lib/stellarOperations";
+import {
+  validateOperations,
+  BatchValidationError,
+  INVOKE_CONTRACT_USER_MESSAGE,
+  isInvokeContractBuildError,
+} from "@/app/lib/stellarOperations";
+import { captureSorobanNotSupportedWarning } from "@/app/lib/sentry";
 
 /**
  * Stellar transaction status
@@ -353,6 +359,24 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
         onSuccess?.(result);
         return result;
       } catch (err) {
+        if (isInvokeContractBuildError(err)) {
+          captureSorobanNotSupportedWarning({ source: "executeTransaction" });
+          const error: StellarTransactionError = {
+            code: "INVOKE_CONTRACT_NOT_SUPPORTED",
+            message: INVOKE_CONTRACT_USER_MESSAGE,
+          };
+          setState((prev) => ({
+            ...prev,
+            status: "error",
+            isLoading: false,
+            error,
+            result: null,
+            transactionHash: null,
+          }));
+          onError?.(error);
+          return null;
+        }
+
         const error = err as StellarTransactionError;
         setState((prev) => ({
           ...prev,
@@ -500,7 +524,28 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
         return null;
       }
 
-      // Validate before touching the network
+      const invokeContractIndex = currentOps.findIndex(
+        (q) => q.operation.type === "invoke_contract"
+      );
+      if (invokeContractIndex >= 0) {
+        captureSorobanNotSupportedWarning({
+          source: "executeBatchTransaction",
+          operationIndex: invokeContractIndex,
+        });
+        const error: StellarTransactionError = {
+          code: "INVOKE_CONTRACT_NOT_SUPPORTED",
+          message: INVOKE_CONTRACT_USER_MESSAGE,
+        };
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          isLoading: false,
+          error,
+        }));
+        onError?.(error);
+        return null;
+      }
+
       try {
         validateOperations(currentOps.map((q) => q.operation));
       } catch (err) {

@@ -100,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       syncedSessionEmailRef.current = null;
       if (authSourceRef.current === "session") {
         clearAuthState();
+        void signOut({ redirect: false });
       }
     }
 

@@ -127,6 +127,35 @@ export interface InvokeContractOperation {
   source?: string;
 }
 
+/** Soroban implementation plan: SOROBAN_SMART_WALLET_SPIKE.md */
+export const INVOKE_CONTRACT_NOT_SUPPORTED_CODE = "INVOKE_CONTRACT_NOT_SUPPORTED" as const;
+
+export const INVOKE_CONTRACT_USER_MESSAGE =
+  "Smart contract interactions are not yet supported" as const;
+
+export type InvokeContractBuildError = {
+  code: typeof INVOKE_CONTRACT_NOT_SUPPORTED_CODE;
+  message: typeof INVOKE_CONTRACT_USER_MESSAGE;
+};
+
+export function invokeContractBuildError(): InvokeContractBuildError {
+  return {
+    code: INVOKE_CONTRACT_NOT_SUPPORTED_CODE,
+    message: INVOKE_CONTRACT_USER_MESSAGE,
+  };
+}
+
+export function isInvokeContractBuildError(
+  value: unknown
+): value is InvokeContractBuildError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value as InvokeContractBuildError).code === INVOKE_CONTRACT_NOT_SUPPORTED_CODE
+  );
+}
+
 /** Union of all supported operation descriptors */
 export type StellarOperation =
   | PaymentOperation

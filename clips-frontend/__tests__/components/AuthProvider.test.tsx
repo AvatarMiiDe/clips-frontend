@@ -1,7 +1,7 @@
 import React from "react";
 import { render, waitFor, act } from "@testing-library/react";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 
 jest.mock("next-auth/react", () => ({
@@ -83,7 +83,49 @@ describe("AuthProvider", () => {
     });
   });
 
-  it("clears localStorage when the NextAuth session expires", async () => {
+  it("does not redirect while session status is loading", async () => {
+    (useSession as jest.Mock).mockReturnValue({
+      data: null,
+      status: "loading",
+    });
+    (usePathname as jest.Mock).mockReturnValue("/dashboard");
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
+
+  it("allows authenticated users through protected routes", async () => {
+    (useSession as jest.Mock).mockReturnValue({
+      data: {
+        user: {
+          email: "oauth@example.com",
+          name: "OAuth User",
+          onboardingStep: 3,
+        },
+      },
+      status: "authenticated",
+    });
+    (usePathname as jest.Mock).mockReturnValue("/dashboard");
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(push).not.toHaveBeenCalledWith("/login");
+    });
+  });
+
+  it("clears localStorage and signs out when the NextAuth session expires", async () => {
     let sessionStatus: "authenticated" | "unauthenticated" = "authenticated";
     let sessionData: { user: { email: string; name: string; onboardingStep: number } } | null =
       {
@@ -120,6 +162,7 @@ describe("AuthProvider", () => {
 
     await waitFor(() => {
       expect(localStorage.getItem("clipcash_user")).toBeNull();
+      expect(signOut).toHaveBeenCalledWith({ redirect: false });
     });
   });
 

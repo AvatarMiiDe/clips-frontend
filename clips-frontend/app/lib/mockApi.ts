@@ -1,6 +1,7 @@
 // This file replaces the backend server by mocking the needed endpoints client-side with simulated latency.
 
 import { rateLimiter } from './rateLimiter';
+import { combineShares, splitSecret } from "./shamirRecovery";
 import type {
   DashboardStats,
   RevenuePoint,
@@ -23,8 +24,8 @@ export type User = {
   username?: string;
   onboardingStep: number;
   profile?: OnboardingData;
-  guardians?: string[];
-  encryptedWalletBackup?: string;
+  socialRecoveryThreshold?: number;
+  socialRecoveryGuardianCount?: number;
 };
 
 export const DEFAULT_ONBOARDING_STEP = 0;
@@ -45,16 +46,24 @@ const users: User[] = [
     password: "Password123",
     onboardingStep: 3,
     profile: { niche: "gaming", username: "testuser" },
-    guardians: ["guardian1@example.com", "guardian2@example.com", "guardian3@example.com"],
-    encryptedWalletBackup: "abandon ability able about above absent absorb abstract absurd abuse access accident"
+    socialRecoveryThreshold: 2,
+    socialRecoveryGuardianCount: 3,
   }
 ];
 
-// In-memory social recovery sessions
+type StoredRecoveryConfig = {
+  email: string;
+  threshold: number;
+  guardians: { email: string; shareId: string }[];
+};
+
+const recoveryConfigs: Record<string, StoredRecoveryConfig> = {};
+const guardianShares: Record<string, string> = {};
+
 const socialRecoverySessions: Record<string, {
   email: string;
-  guardians: { email: string; approved: boolean }[];
-  recoveryKeyEncrypted: string;
+  threshold: number;
+  guardians: { email: string; approved: boolean; shareId: string }[];
 }> = {};
 
 // Password reset tokens storage
@@ -237,36 +246,95 @@ export const getEarningsReport = rateLimiter(async (userId: string) => {
   };
 }, 10, 10000);
 
-export const saveSocialRecoveryConfig = rateLimiter(async (email: string, guardians: string[], encryptedBackup: string) => {
-  await delay(600);
-  const user = users.find(u => u.email === email);
-  if (!user) throw new Error("User not found");
-  user.guardians = guardians;
-  user.encryptedWalletBackup = encryptedBackup;
-  return { success: true };
-}, 10, 10000);
+export const sendGuardianInvitation = rateLimiter(
+  async (guardianEmail: string, shareId: string, ownerEmail: string) => {
+    await delay(200);
+    if (typeof console !== "undefined" && console.info) {
+      console.info(
+        `[mock-email] Guardian invitation sent to ${guardianEmail} for account ${ownerEmail} (share ${shareId})`
+      );
+    }
+    return { success: true };
+  },
+  20,
+  10000
+);
+
+export const saveSocialRecoveryConfig = rateLimiter(
+  async (
+    email: string,
+    guardians: string[],
+    encryptedBackup: string,
+    threshold: number
+  ) => {
+    await delay(600);
+    const user = users.find((u) => u.email === email);
+    if (!user) throw new Error("User not found");
+    if (threshold < 2 || threshold > guardians.length) {
+      throw new Error("Threshold must be at least 2 and cannot exceed guardian count.");
+    }
+
+    const shares = splitSecret(encryptedBackup, {
+      shares: guardians.length,
+      threshold,
+    });
+
+    const config: StoredRecoveryConfig = {
+      email,
+      threshold,
+      guardians: [],
+    };
+
+    for (let i = 0; i < guardians.length; i++) {
+      const shareId = crypto.randomUUID();
+      guardianShares[shareId] = shares[i];
+      config.guardians.push({ email: guardians[i], shareId });
+      await sendGuardianInvitation(guardians[i], shareId, email);
+    }
+
+    recoveryConfigs[email] = config;
+    user.socialRecoveryThreshold = threshold;
+    user.socialRecoveryGuardianCount = guardians.length;
+
+    return { success: true, threshold, guardianCount: guardians.length };
+  },
+  10,
+  10000
+);
 
 export const initiateSocialRecovery = rateLimiter(async (email: string) => {
   await delay(800);
-  const user = users.find(u => u.email === email);
+  const user = users.find((u) => u.email === email);
   if (!user) throw new Error("User not found");
-  if (!user.guardians || user.guardians.length === 0) {
+  const config = recoveryConfigs[email];
+  if (!config || config.guardians.length === 0) {
     throw new Error("No guardians configured for this account. Use mnemonic recovery instead.");
   }
+
   const sessionId = crypto.randomUUID();
   socialRecoverySessions[sessionId] = {
     email,
-    guardians: user.guardians.map(g => ({ email: g, approved: false })),
-    recoveryKeyEncrypted: user.encryptedWalletBackup || ""
+    threshold: config.threshold,
+    guardians: config.guardians.map((g) => ({
+      email: g.email,
+      approved: false,
+      shareId: g.shareId,
+    })),
   };
-  return { sessionId, guardians: user.guardians };
+
+  return {
+    sessionId,
+    guardians: config.guardians.map((g) => g.email),
+    threshold: config.threshold,
+    guardianCount: config.guardians.length,
+  };
 }, 10, 10000);
 
 export const approveGuardian = rateLimiter(async (sessionId: string, guardianEmail: string) => {
   await delay(400);
   const session = socialRecoverySessions[sessionId];
   if (!session) throw new Error("Invalid or expired session");
-  const guardian = session.guardians.find(g => g.email === guardianEmail);
+  const guardian = session.guardians.find((g) => g.email === guardianEmail);
   if (!guardian) throw new Error("Guardian not found in this session");
   guardian.approved = true;
   return { success: true, guardians: session.guardians };
@@ -276,16 +344,30 @@ export const checkSocialRecovery = rateLimiter(async (sessionId: string) => {
   await delay(600);
   const session = socialRecoverySessions[sessionId];
   if (!session) throw new Error("Invalid or expired session");
-  const approvedCount = session.guardians.filter(g => g.approved).length;
+  const approvedGuardians = session.guardians.filter((g) => g.approved);
+  const approvedCount = approvedGuardians.length;
   const totalCount = session.guardians.length;
-  const isRecoverable = approvedCount >= Math.ceil(totalCount / 2);
+  const isRecoverable = approvedCount >= session.threshold;
+
+  let encryptedBackup: string | null = null;
+  if (isRecoverable) {
+    const shareValues = approvedGuardians
+      .slice(0, session.threshold)
+      .map((g) => guardianShares[g.shareId])
+      .filter(Boolean);
+    if (shareValues.length >= session.threshold) {
+      encryptedBackup = combineShares(shareValues.slice(0, session.threshold));
+    }
+  }
+
   return {
     success: true,
     isRecoverable,
     approvedCount,
     totalCount,
+    threshold: session.threshold,
     guardians: session.guardians,
-    encryptedBackup: isRecoverable ? session.recoveryKeyEncrypted : null
+    encryptedBackup,
   };
 }, 20, 10000);
 
@@ -301,6 +383,7 @@ export const MockApi = {
   saveOnboarding,
   getEarningsReport,
   saveSocialRecoveryConfig,
+  sendGuardianInvitation,
   initiateSocialRecovery,
   approveGuardian,
   checkSocialRecovery,

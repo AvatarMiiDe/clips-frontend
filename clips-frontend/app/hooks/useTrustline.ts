@@ -81,9 +81,16 @@ export function useTrustline(options: UseTrustlineOptions = {}) {
         // Build unsigned transaction XDR
         // Stellar memo text is limited to 28 bytes — keep it short
         const memoText = action === "add" ? `Add ${assetCode}` : `Remove ${assetCode}`;
-        const { xdr } = await buildBatchTransaction(publicKey, [op], {
+        const batch = await buildBatchTransaction(publicKey, [op], {
           memo: memoText.slice(0, 28),
         });
+        if (!batch.ok) {
+          throw {
+            code: batch.error.code,
+            message: batch.error.message,
+          } as TrustlineError;
+        }
+        const { xdr } = batch;
 
         let signedXdr: string;
 

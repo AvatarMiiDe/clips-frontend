@@ -7,7 +7,12 @@ import {
   getFriendbotUrl,
 } from "./networkConfig";
 import type { StellarOperation } from "./stellarOperations";
-import { validateOperations } from "./stellarOperations";
+import {
+  validateOperations,
+  invokeContractBuildError,
+  isInvokeContractBuildError,
+  type InvokeContractBuildError,
+} from "./stellarOperations";
 
 // Re-export so existing callers that import these from stellar.ts keep working.
 export { STELLAR_NETWORK };
@@ -165,7 +170,9 @@ export const submitTransaction = async (signedTx: StellarSdk.Transaction) => {
  * Convert a typed `StellarOperation` descriptor into a real Stellar SDK
  * `xdr.Operation` object.
  */
-function toSdkOperation(op: StellarOperation): StellarSdk.xdr.Operation {
+function toSdkOperation(
+  op: StellarOperation
+): StellarSdk.xdr.Operation | InvokeContractBuildError {
   switch (op.type) {
     case "payment": {
       const asset =
@@ -265,13 +272,7 @@ function toSdkOperation(op: StellarOperation): StellarSdk.xdr.Operation {
       });
 
     case "invoke_contract":
-      // Soroban contract invocations require the Soroban RPC path and a
-      // SorobanDataBuilder — this stub builds a placeholder operation.
-      // Replace with a full Soroban client call in production.
-      throw new Error(
-        "invoke_contract operations must be built via the Soroban RPC client. " +
-          "Use SorobanRpc.Server and assembleTransaction() before calling submitTransaction()."
-      );
+      return invokeContractBuildError();
 
     default: {
       const _exhaustive: never = op;
@@ -288,6 +289,12 @@ export interface BatchTransactionResult {
   /** Number of operations in the transaction */
   operationCount: number;
 }
+
+export type BuildBatchTransactionResult =
+  | ({ ok: true } & BatchTransactionResult)
+  | { ok: false; error: InvokeContractBuildError; operationIndex: number };
+
+export { isInvokeContractBuildError, type InvokeContractBuildError };
 
 /**
  * Build a multi-operation Stellar transaction and return the unsigned XDR.
@@ -314,7 +321,7 @@ export const buildBatchTransaction = async (
     memo?: string;
     timeoutSeconds?: number;
   } = {}
-): Promise<BatchTransactionResult> => {
+): Promise<BuildBatchTransactionResult> => {
   const { memo, timeoutSeconds = 30 } = options;
 
   // Validate before touching the network
@@ -349,8 +356,12 @@ export const buildBatchTransaction = async (
     networkPassphrase: NETWORK_PASSPHRASE,
   });
 
-  for (const op of operations) {
-    builder.addOperation(toSdkOperation(op));
+  for (let i = 0; i < operations.length; i++) {
+    const sdkOp = toSdkOperation(operations[i]);
+    if (isInvokeContractBuildError(sdkOp)) {
+      return { ok: false, error: sdkOp, operationIndex: i };
+    }
+    builder.addOperation(sdkOp);
   }
 
   if (memo) {
@@ -360,6 +371,7 @@ export const buildBatchTransaction = async (
   const transaction = builder.setTimeout(timeoutSeconds).build();
 
   return {
+    ok: true,
     xdr: transaction.toEnvelope().toXDR("base64"),
     feeStroops: totalFee,
     operationCount: operations.length,
