@@ -83,7 +83,7 @@ const MetaMaskIcon = ({ className }: { className?: string }) => (
 /* ================= PAGE ================= */
 
 export default function PlatformsPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading } = useAuth();
   const { data: session, status: sessionStatus } = useSession();
   const { showToast } = useToast();
 
