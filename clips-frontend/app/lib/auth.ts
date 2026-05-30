@@ -3,6 +3,7 @@ import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
 import TwitterProvider from "next-auth/providers/twitter";
 import InstagramProvider from "next-auth/providers/instagram";
+import { jwtCallback, sessionCallback } from "./authCallbacks";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -59,25 +60,8 @@ export const authOptions: NextAuthOptions = {
     },
   ],
   callbacks: {
-    async jwt({ token, account, profile }) {
-      if (account) {
-        token.accessToken = account.access_token;
-        token.provider = account.provider;
-        if (profile) {
-          token.profile = profile;
-        }
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).onboardingStep = session.user.email?.includes("new") ? 1 : 3;
-        (session.user as any).accessToken = token.accessToken;
-        (session.user as any).provider = token.provider;
-        (session.user as any).profile = token.profile;
-      }
-      return session;
-    },
+    jwt: jwtCallback,
+    session: sessionCallback,
   },
   pages: {
     signIn: "/login",

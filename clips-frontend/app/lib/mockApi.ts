@@ -20,6 +20,14 @@ export type User = {
   encryptedWalletBackup?: string;
 };
 
+export const DEFAULT_ONBOARDING_STEP = 0;
+
+export function getOnboardingStepForEmail(email: string | null | undefined): number {
+  if (!email) return DEFAULT_ONBOARDING_STEP;
+  const user = users.find((u) => u.email === email);
+  return user?.onboardingStep ?? DEFAULT_ONBOARDING_STEP;
+}
+
 // In-memory fake database
 const users: User[] = [
   {

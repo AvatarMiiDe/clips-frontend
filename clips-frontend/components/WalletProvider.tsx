@@ -179,34 +179,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   // Restore persisted session on mount
   useEffect(() => {
-    secureStorage
-      .getItem(STORAGE_KEY)
-      .then((stored) => {
+    async function restoreSession() {
+      try {
+        const stored = await secureStorage.getItem(STORAGE_KEY);
         if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed.address && parsed.walletType) {
-            setState((prev: WalletState) => ({
-              ...prev,
-              address: parsed.address!,
-              chainId: parsed.chainId ?? null,
-              walletType: parsed.walletType!,
-              isConnected: true,
-            }));
-            if (parsed.walletType === "stellar") {
-              setStellarSecret(parsed.stellarSecret ?? null);
-              setStellarMnemonic(parsed.stellarMnemonic ?? null);
+          try {
+            const parsed = JSON.parse(stored);
+            if (parsed.address && parsed.walletType) {
+              setState((prev: WalletState) => ({
+                ...prev,
+                address: parsed.address!,
+                chainId: parsed.chainId ?? null,
+                walletType: parsed.walletType!,
+                isConnected: true,
+              }));
+              if (parsed.walletType === "stellar") {
+                setStellarSecret(parsed.stellarSecret ?? null);
+                setStellarMnemonic(parsed.stellarMnemonic ?? null);
+              }
             }
+          } catch {
+            await secureStorage.removeItem(STORAGE_KEY);
           }
         }
+      } catch {
+        await secureStorage.removeItem(STORAGE_KEY);
+      } finally {
         setState((prev: WalletState) => ({ ...prev, isRestoringSession: false }));
-      })
-      .catch(() => {
-        setState((prev: WalletState) => ({ ...prev, isRestoringSession: false }));
-      });
-    } catch {
-      // Malformed JSON — clear it
-      sessionStorage.removeItem(STORAGE_KEY);
+      }
     }
+
+    void restoreSession();
   }, []);
 
   // Balance updater helper
