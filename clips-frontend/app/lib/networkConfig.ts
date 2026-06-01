@@ -15,8 +15,20 @@
 export type StellarNetwork = "testnet" | "mainnet";
 
 /** Normalised network value derived from the environment variable. */
-export const STELLAR_NETWORK: StellarNetwork =
+const _envNetwork: StellarNetwork =
   process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
+
+/**
+ * Runtime network — reads a localStorage override first (set by NetworkSwitcher),
+ * then falls back to the NEXT_PUBLIC_STELLAR_NETWORK env var.
+ */
+export const STELLAR_NETWORK: StellarNetwork = (() => {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("clipcash_network_override");
+    if (stored === "testnet" || stored === "mainnet") return stored;
+  }
+  return _envNetwork;
+})();
 
 /** Whether the app is currently running against mainnet. */
 export const IS_MAINNET = STELLAR_NETWORK === "mainnet";

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Wallet, ExternalLink, Copy, Check, AlertCircle, Send, Loader2, CheckCircle, Activity } from "lucide-react";
 import { useWalletConnection } from "@/app/hooks/useWalletConnection";
 import { useAutoStellarWallet } from "@/app/hooks/useAutoStellarWallet";
+import { useNetworkOverride } from "@/app/hooks/useNetworkOverride";
+import NetworkSwitcher from "@/components/NetworkSwitcher";
 import ActivityFeed from "@/components/wallet/ActivityFeed";
 
 /**
@@ -13,7 +15,8 @@ import ActivityFeed from "@/components/wallet/ActivityFeed";
  * Clean Venmo-style send form – no blockchain jargon visible by default.
  */
 export default function WalletInfoCard() {
-  const { publicKey, status, balance, error, network } = useAutoStellarWallet();
+  const { publicKey, status, balance, error } = useAutoStellarWallet();
+  const { network, setNetwork } = useNetworkOverride();
   const { stellarSecret, refreshBalance } = useWallet();
   const formRef = useRef<HTMLFormElement>(null);
   const recipientInputRef = useRef<HTMLInputElement>(null);
@@ -109,22 +112,25 @@ export default function WalletInfoCard() {
           </div>
         </div>
 
-        {/* Status badge */}
-        {status === "ready" && (
-          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 border border-brand/20 text-brand text-[11px] font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
-            Wallet Ready
-          </span>
-        )}
-        {status === "loading" && (
-          <Loader2 className="w-4 h-4 text-muted animate-spin" />
-        )}
-        {status === "error" && (
-          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 border border-error/30 text-error text-[11px] font-bold">
-            <AlertCircle className="w-3 h-3" />
-            Error
-          </span>
-        )}
+        {/* Status badge + Network Switcher */}
+        <div className="flex items-center gap-3">
+          <NetworkSwitcher network={network} onChange={setNetwork} />
+          {status === "ready" && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand/10 border border-brand/20 text-brand text-[11px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
+              Wallet Ready
+            </span>
+          )}
+          {status === "loading" && (
+            <Loader2 className="w-4 h-4 text-muted animate-spin" />
+          )}
+          {status === "error" && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 border border-error/30 text-error text-[11px] font-bold">
+              <AlertCircle className="w-3 h-3" />
+              Error
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Error message */}
