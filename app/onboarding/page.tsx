@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { MockApi } from "@/app/lib/mockApi";
 import { Loader2, Link2, User as UserIcon, MonitorPlay, ArrowRight, CheckCircle2, Wallet, Info } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
 import { useRouter } from "next/navigation";
+import { useEmbeddedWallet } from "@/components/EmbeddedWalletProvider";
+import { useToast } from "@/hooks/useToast";
+import { fundWithFriendbot } from "@/app/lib/stellar";
+import { IS_TESTNET } from "@/app/lib/networkConfig";
+import { useBalance } from "@/app/hooks/useBalance";
 
 // Same inline SVGs for perfect styling
 const InstagramIcon = ({ className }: { className?: string }) => (
@@ -98,6 +103,47 @@ function FieldError({ message, id }: { message?: string; id?: string }) {
 
 function WalletAwarenessStep({ onContinue, loading }: { onContinue: () => void; loading: boolean }) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+  const [fundingSuccess, setFundingSuccess] = useState(false);
+  const [fundingError, setFundingError] = useState<string | null>(null);
+  const { wallet } = useEmbeddedWallet();
+  const { success, error } = useToast();
+  
+  const { refresh } = useBalance({
+    publicKey: wallet?.publicKey || null,
+    network: IS_TESTNET ? "TESTNET" : "PUBLIC",
+    autoRefresh: false,
+  });
+
+  useEffect(() => {
+    // Auto-fund on testnet when wallet is available
+    const fundWallet = async () => {
+      if (!IS_TESTNET || !wallet?.publicKey || isFunding || fundingSuccess) return;
+      
+      setIsFunding(true);
+      setFundingError(null);
+      
+      try {
+        await fundWithFriendbot(wallet.publicKey);
+        setFundingSuccess(true);
+        success("Wallet funded with 10,000 XLM!");
+        
+        // Refresh balance a few times to ensure it updates
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          refresh();
+        }
+      } catch (err) {
+        console.error("Friendbot funding failed:", err);
+        setFundingError(err instanceof Error ? err.message : "Failed to fund wallet");
+        error("Wallet funding failed. Please try again later.");
+      } finally {
+        setIsFunding(false);
+      }
+    };
+
+    fundWallet();
+  }, [wallet?.publicKey, IS_TESTNET, isFunding, fundingSuccess, success, refresh]);
 
   return (
     <div className="w-full flex flex-col items-center justify-center animate-in zoom-in-95 fade-in duration-500 mt-12">
@@ -107,14 +153,53 @@ function WalletAwarenessStep({ onContinue, loading }: { onContinue: () => void; 
           <Wallet className="w-8 h-8 text-brand" />
         </div>
 
-        <h2 className="text-[28px] font-bold tracking-tight text-white mb-3">
+        <h2 className="text-[32px] font-bold tracking-tight text-white mb-3">
           Your payment wallet is ready! 🎉
         </h2>
-        <p className="text-muted text-[15px] leading-relaxed mb-2">
+        <p className="text-muted text-[16px] leading-relaxed mb-6">
           We've automatically set up a Stellar wallet for you. You can use it to receive earnings, mint NFTs, and manage your creator payments — no crypto experience needed.
         </p>
 
-        <div className="relative inline-block mb-8">
+        {/* Testnet Funding Status */}
+        {IS_TESTNET && (
+          <div className="mb-6 p-4 bg-brand/10 border border-brand/20 rounded-xl text-left">
+            {isFunding && (
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-brand animate-spin" />
+                <p className="text-[14px] font-bold text-brand">Funding your wallet with 10,000 XLM...</p>
+              </div>
+            )}
+            {fundingSuccess && (
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-brand" />
+                <p className="text-[14px] font-bold text-brand">Wallet funded with 10,000 XLM! 🎊</p>
+              </div>
+            )}
+            {fundingError && !isFunding && (
+              <div className="flex items-center gap-3">
+                <Info className="w-5 h-5 text-amber-500" />
+                <p className="text-[14px] font-bold text-amber-500">Funding temporarily unavailable. You can still continue.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mainnet CTA */}
+        {!IS_TESTNET && (
+          <div className="mb-6 p-4 bg-white/5 border border-white/10 rounded-xl text-left">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-white shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[14px] font-bold text-white mb-1">Fund your wallet</p>
+                <p className="text-[12px] text-muted leading-relaxed">
+                  On mainnet, you'll need to fund your wallet with XLM to get started. You can do this from your dashboard after onboarding.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="relative inline-block mb-6">
           <button
             onClick={() => setShowTooltip(!showTooltip)}
             className="flex items-center gap-1.5 text-brand text-[13px] font-medium hover:underline mx-auto"
@@ -157,10 +242,10 @@ function WalletAwarenessStep({ onContinue, loading }: { onContinue: () => void; 
 
         <button
           onClick={onContinue}
-          disabled={loading}
+          disabled={loading || isFunding}
           className="w-full bg-brand hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed text-black py-[15px] rounded-[12px] font-bold text-[15px] flex justify-center items-center gap-2 transition-all active:scale-[0.98] shadow-[0_0_20px_rgba(0,229,143,0.1)]"
         >
-          {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <>Go to Dashboard <CheckCircle2 className="w-[18px] h-[18px]" /></>}
+          {loading || isFunding ? <Loader2 className="animate-spin w-5 h-5" /> : <>Go to Dashboard <CheckCircle2 className="w-[18px] h-[18px]" /></>}
         </button>
       </div>
     </div>

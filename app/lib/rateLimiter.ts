@@ -8,10 +8,13 @@ export const rateLimiter = (fn: Function, maxCalls: number, windowMs: number) =>
     }
     if (callTimestamps.length >= maxCalls) {
       if (typeof window !== 'undefined') {
+        // Calculate when the oldest call in the window will expire
+        const resetAt = callTimestamps[0] + windowMs;
         window.dispatchEvent(
           new CustomEvent('rate-limit-exceeded', {
             detail: {
               message: `Rate limit exceeded. Max ${maxCalls} calls per ${windowMs / 1000}s.`,
+              resetAt,
             },
           })
         );

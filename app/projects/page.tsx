@@ -34,7 +34,10 @@ export default function ProjectsPage() {
     canUndo, 
     canRedo, 
     clear 
-  } = useUndoRedo<string[]>([]);
+  } = useUndoRedo<string[]>([], 50, {
+    undoMessage: "Selection undone",
+    redoMessage: "Selection redone"
+  });
   const [loading, setLoading] = useState(true);
   const [isMinting, setIsMinting] = useState(false);
 
