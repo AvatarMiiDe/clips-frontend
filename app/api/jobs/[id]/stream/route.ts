@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { jobStore } from "../../shared/jobStore";
-import type { Job } from "../../shared/types";
 
 // In-memory storage for demo purposes (shared with main job route)
 
@@ -35,9 +34,7 @@ export async function GET(
       // Simulate progress updates every 500ms (per acceptance criteria)
       const intervalId = setInterval(() => {
         // Refresh job from store (in case other requests updated it)
-        const latest = jobStore.get(jobId);
-        if (!latest) return;
-        job = latest;
+        job = jobStore.get(jobId);
 
         if (job.status === "processing") {
           const elapsed = (Date.now() - job.createdAt) / 1000;
@@ -97,7 +94,7 @@ export async function GET(
   });
 }
 
-function sendUpdate(controller: ReadableStreamDefaultController, data: Job) {
+function sendUpdate(controller: ReadableStreamDefaultController, data: any) {
   const payload = JSON.stringify({
     progress: data.progress,
     status: data.status,

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "../shared/jobStore";
-import { JobRestartSchema, parseBody } from "@/app/api/schemas";
 
 /**
  * Mock API endpoint for job status
@@ -73,9 +72,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id: jobId } = await context.params;
-  const raw = await request.json().catch(() => ({}));
-  const parsed = parseBody(JobRestartSchema, raw);
-  if (!parsed.ok) return NextResponse.json(parsed.result, { status: 400 });
+  const body = await request.json();
 
   // Update job status (for retry functionality)
   const job = jobStore.get(jobId) || {

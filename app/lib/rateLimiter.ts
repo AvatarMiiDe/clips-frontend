@@ -11,7 +11,8 @@ export const rateLimiter = <TArgs extends unknown[]>(
       callTimestamps.shift();
     }
     if (callTimestamps.length >= maxCalls) {
-      if (typeof window !== "undefined") {
+      if (typeof window !== 'undefined') {
+        // Calculate when the oldest call in the window will expire
         const resetAt = callTimestamps[0] + windowMs;
         window.dispatchEvent(
           new CustomEvent("rate-limit-exceeded", {

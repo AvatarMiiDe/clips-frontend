@@ -26,7 +26,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { uploadFile } from "@/app/lib/cloudStorage";
-import { UploadFormSchema, parseBody } from "@/app/api/schemas";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 const ALLOWED_TYPES = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
@@ -48,8 +47,9 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 
-    const parsed = parseBody(UploadFormSchema, { files });
-    if (!parsed.ok) return NextResponse.json(parsed.result, { status: 400 });
+    if (!files || files.length === 0) {
+      return NextResponse.json({ error: "No files provided" }, { status: 400 });
+    }
 
     // Validate every file before touching storage
     const validationErrors: string[] = [];
