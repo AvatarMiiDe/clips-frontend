@@ -1,80 +1,114 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { mapSessionToUser, persistClipcashUser, clearClipcashUser } from "@/app/lib/authUser";
-import type { User } from "@/app/lib/mockApi";
+import { useRouter, usePathname } from "next/navigation";
 
-interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  setUser: (user: User) => void;
+const STORAGE_KEY = "clipcash_user";
+
+const PUBLIC_ROUTES = ["/", "/login", "/privacy", "/terms", "/status", "/cookies"];
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  onboardingStep?: number;
+  avatarUrl?: string;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthContextValue {
+  user: AuthUser | null;
+  isLoading: boolean;
+  setUser: (user: AuthUser) => void;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // Initialize user from localStorage and NextAuth session
-  // Note: Route protection is now handled by middleware.ts at the edge.
-  // This component is responsible for auth state management only.
+  const [user, setUserState] = useState<AuthUser | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as AuthUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const isLoading = status === "loading";
+
+  // Sync NextAuth session -> local state
   useEffect(() => {
-    const initializeAuth = () => {
-      // First check if we have a persisted user in localStorage
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("clipcash_user");
-        if (stored) {
-          try {
-            setUser(JSON.parse(stored));
-          } catch (e) {
-            clearClipcashUser();
+    if (status === "loading") return;
+
+    if (status === "authenticated" && session?.user) {
+      const { email, name } = session.user as { email?: string; name?: string; onboardingStep?: number };
+      const sessionUser: AuthUser = {
+        id: email ?? "oauth_user",
+        email: email ?? "",
+        name: name ?? undefined,
+        onboardingStep: (session.user as any).onboardingStep,
+      };
+      setUserState(sessionUser);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionUser));
+    } else if (status === "unauthenticated") {
+      // Only clear if we were previously synced from a session (not a manual mock login)
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try {
+          const stored = JSON.parse(raw) as AuthUser;
+          // If the stored user looks like it came from oauth (no explicit setUser call),
+          // treat session expiry as a logout.
+          if (!stored.id.startsWith("mock")) {
+            localStorage.removeItem(STORAGE_KEY);
+            setUserState(null);
+            signOut({ redirect: false });
           }
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+          setUserState(null);
         }
       }
-
-      // Update user from NextAuth session
-      if (status === "authenticated" && session?.user) {
-        const mappedUser = mapSessionToUser(session);
-        setUser(mappedUser);
-        persistClipcashUser(mappedUser);
-      } else if (status === "unauthenticated") {
-        setUser(null);
-        clearClipcashUser();
-      }
-
-      // Mark auth as ready when session is loaded
-      if (status !== "loading") {
-        setIsLoading(false);
-      }
-    };
-
-    initializeAuth();
-  }, [session, status]);
-
-  // Handle session expiration and cleanup
-  // Keep this as a fallback safety layer, though middleware should catch most cases
-  useEffect(() => {
-    if (status === "unauthenticated" && user) {
-      clearClipcashUser();
-      setUser(null);
-      void signOut({ redirect: false });
     }
-  }, [status, user]);
+  }, [status, session]);
+
+  // Route guard — only redirect when we know for certain the user is not authenticated
+  useEffect(() => {
+    if (isLoading) return;
+    if (status === "authenticated") return; // session sync hasn't flushed to user state yet
+    const isPublic = PUBLIC_ROUTES.some(
+      (r) => pathname === r || pathname.startsWith(r + "/")
+    );
+    if (!user && !isPublic) {
+      router.push("/login");
+    }
+  }, [user, isLoading, status, pathname, router]);
+
+  const setUser = useCallback((newUser: AuthUser) => {
+    setUserState(newUser);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+  }, []);
+
+  const logout = useCallback(async () => {
+    setUserState(null);
+    localStorage.removeItem(STORAGE_KEY);
+    await signOut({ redirect: false });
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, setUser }}>
+    <AuthContext.Provider value={{ user, isLoading, setUser, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
+  return ctx;
 }
