@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore, type JobStatus, type AiErrorCode } from "../../shared/jobStore";
+import { parseJsonRequest } from "../../shared/jsonBody";
 import { z } from "zod";
 
 // ─── Validation schema ────────────────────────────────────────────────────────
@@ -61,14 +62,10 @@ export async function POST(
   }
 
   // ── Body parsing ───────────────────────────────────────────────────────────
-  let rawBody: unknown;
-  try {
-    rawBody = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonRequest<unknown>(request);
+  if (!parsedBody.ok) return parsedBody.response;
 
-  const parsed = CallbackBodySchema.safeParse(rawBody);
+  const parsed = CallbackBodySchema.safeParse(parsedBody.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Validation failed", issues: parsed.error.issues },
