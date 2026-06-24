@@ -33,8 +33,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/lib/auth";
+import { auth } from "@/app/lib/auth";
 import { uploadToQuarantine, moveFromQuarantine, deleteFile } from "@/app/lib/cloudStorage";
 import { scanFile, VirusScanError, getScanConfig } from "@/app/lib/virusScan";
 import { checkCsrf } from "@/app/lib/csrf";
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest) {
     const csrfError = checkCsrf(request);
     if (csrfError) return csrfError;
 
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     const userId = (session?.user as { id?: string } | undefined)?.id;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

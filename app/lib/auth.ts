@@ -1,13 +1,26 @@
-import { NextAuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import AppleProvider from "next-auth/providers/apple";
-import TwitterProvider from "next-auth/providers/twitter";
-import InstagramProvider from "next-auth/providers/instagram";
+import type { NextAuthConfig } from "next-auth";
+import Google from "next-auth/providers/google";
+import Apple from "next-auth/providers/apple";
+import Twitter from "next-auth/providers/twitter";
+import Instagram from "next-auth/providers/instagram";
 import { jwtCallback, sessionCallback } from "./authCallbacks";
 
-export const authOptions: NextAuthOptions = {
+/**
+ * Auth.js v5 configuration — Issue #530
+ *
+ * Replaces the v4 `NextAuthOptions` type with the v5 `NextAuthConfig` type.
+ * All OAuth providers (Google, Apple, Twitter/X, Instagram, TikTok) and
+ * callbacks (jwt, session) are preserved from the original implementation.
+ *
+ * Breaking changes handled:
+ *  - `NextAuthOptions` → `NextAuthConfig`
+ *  - Named default imports updated (e.g. `GoogleProvider` → `Google`)
+ *  - `getServerSession(authOptions)` callers should use `auth()` from next-auth
+ *    (handled in route.ts)
+ */
+export const authOptions: NextAuthConfig = {
   providers: [
-    GoogleProvider({
+    Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
@@ -16,7 +29,7 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    AppleProvider({
+    Apple({
       clientId: process.env.APPLE_ID!,
       clientSecret: {
         appleId: process.env.APPLE_ID!,
@@ -25,12 +38,12 @@ export const authOptions: NextAuthOptions = {
         keyId: process.env.APPLE_KEY_ID!,
       } as any,
     }),
-    TwitterProvider({
+    Twitter({
       clientId: process.env.TWITTER_CLIENT_ID!,
       clientSecret: process.env.TWITTER_CLIENT_SECRET!,
       version: "2.0",
     }),
-    InstagramProvider({
+    Instagram({
       clientId: process.env.INSTAGRAM_CLIENT_ID!,
       clientSecret: process.env.INSTAGRAM_CLIENT_SECRET!,
     }),
@@ -68,3 +81,6 @@ export const authOptions: NextAuthOptions = {
     error: "/login",
   },
 };
+
+import NextAuth from "next-auth";
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
