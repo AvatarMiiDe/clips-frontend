@@ -28,6 +28,33 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
+import { withRetry } from "./retryUtils";
+
+// ─── Concurrency Limited Execution Utility ───────────────────────────────────
+
+/**
+ * Execute tasks in parallel with a maximum concurrency limit
+ * @param tasks Array of functions that return promises
+ * @param concurrency Maximum number of concurrent tasks to execute
+ * @returns Array of results in order of tasks
+ */
+async function parallelWithLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
+
+  const worker = async () => {
+    while (index < tasks.length) {
+      const currentIndex = index++;
+      const task = tasks[currentIndex];
+      results[currentIndex] = await task();
+    }
+  };
+
+  const workers = Array.from({ length: concurrency }, worker);
+  await Promise.all(workers);
+
+  return results;
+}
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -97,6 +124,8 @@ async function uploadSinglePart(
 
 // ─── Multipart upload (> MULTIPART_THRESHOLD) ─────────────────────────────────
 
+const MAX_CONCURRENT_PARTS = 5;
+
 async function uploadMultipart(
   client: S3Client,
   bucket: string,
@@ -114,26 +143,43 @@ async function uploadMultipart(
 
   if (!UploadId) throw new Error("Failed to create multipart upload");
 
-  const parts: { ETag: string; PartNumber: number }[] = [];
+  let parts: { ETag: string; PartNumber: number }[] = [];
 
   try {
-    let partNumber = 1;
-    for (let offset = 0; offset < buffer.length; offset += PART_SIZE) {
+    const partCount = Math.ceil(buffer.length / PART_SIZE);
+
+    // Create an array of tasks for each part upload
+    const uploadTasks: Array<() => Promise<{ ETag: string; PartNumber: number }>> = [];
+    for (let i = 0; i < partCount; i++) {
+      const partNumber = i + 1;
+      const offset = i * PART_SIZE;
       const chunk = buffer.slice(offset, offset + PART_SIZE);
-      const { ETag } = await client.send(
-        new UploadPartCommand({
-          Bucket: bucket,
-          Key: key,
-          UploadId,
-          PartNumber: partNumber,
-          Body: chunk,
-          ContentLength: chunk.length,
-        }),
-      );
-      if (!ETag) throw new Error(`Missing ETag for part ${partNumber}`);
-      parts.push({ ETag, PartNumber: partNumber });
-      partNumber++;
+      
+      uploadTasks.push(async () => {
+        const { ETag } = await withRetry(
+          () =>
+            client.send(
+              new UploadPartCommand({
+                Bucket: bucket,
+                Key: key,
+                UploadId,
+                PartNumber: partNumber,
+                Body: chunk,
+                ContentLength: chunk.length,
+              }),
+            ),
+          { maxAttempts: 3 },
+        );
+        if (!ETag) throw new Error(`Missing ETag for part ${partNumber}`);
+        return { ETag, PartNumber: partNumber };
+      });
     }
+
+    // Execute tasks in parallel with concurrency limit
+    parts = await parallelWithLimit(uploadTasks, MAX_CONCURRENT_PARTS);
+
+    // Sort parts by PartNumber to ensure S3 accepts the complete request
+    parts.sort((a, b) => a.PartNumber - b.PartNumber);
 
     await client.send(
       new CompleteMultipartUploadCommand({

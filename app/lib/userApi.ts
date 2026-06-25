@@ -6,7 +6,7 @@
  * not the Edge runtime.
  */
 
-import { DEFAULT_ONBOARDING_STEP } from "./mockApi";
+import { DEFAULT_ONBOARDING_STEP } from "./types";
 
 export type UserProfile = {
   onboardingStep: number;

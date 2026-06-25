@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import ProcessingHeader from "@/components/dashboard/ProcessingHeader";
 import { Sparkles, Clock, Zap, RefreshCw, X, CheckCircle, AlertCircle, RotateCcw } from "lucide-react";
 import { useProcessStore, selectProcess, selectHasHydrated } from "@/app/store/processStore";
 import { useProcessingStatus } from "@/app/hooks/useProcessingStatus";
@@ -81,8 +80,6 @@ export default function ProcessingPage() {
           <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-brand/5 blur-[120px] rounded-full" />
         </div>
 
-        <ProcessingHeader />
-
         <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
           <div className="flex flex-col items-center text-center space-y-6 mb-12">
             <div className="relative">
@@ -151,8 +148,6 @@ export default function ProcessingPage() {
   if (status === "error") {
     return (
       <div className="min-h-screen bg-background text-white flex flex-col font-sans relative overflow-hidden">
-        <ProcessingHeader />
-
         <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
           <div className="flex flex-col items-center text-center space-y-6 mb-12">
             <div className="relative">
@@ -201,8 +196,6 @@ export default function ProcessingPage() {
         <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-brand/5 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand/3 blur-[120px] rounded-full" />
       </div>
-
-      <ProcessingHeader />
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
         {/* Hero Section */}

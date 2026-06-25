@@ -37,6 +37,7 @@
 
 import { STELLAR_NETWORKS, StellarNetwork } from "./embeddedWallet";
 import { StellarOperation, validateOperations } from "./stellarOperations";
+import { BASE_BACKOFF_MS } from "@/app/lib/constants";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,9 +46,6 @@ const MAX_SEQ_RETRIES = 3;
 
 /** Maximum retries for transient network errors */
 const MAX_NETWORK_RETRIES = 3;
-
-/** Base delay (ms) for exponential backoff */
-const BASE_BACKOFF_MS = 300;
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 

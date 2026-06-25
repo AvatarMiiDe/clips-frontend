@@ -22,10 +22,13 @@ import type {
   EarningsActions,
   EarningsBreakdownItem,
 } from "./types";
+import { useUserStore } from "./userStore";
 
 // ─── Cache TTL ────────────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+import { EARNINGS_CACHE_TTL_MS } from "@/app/lib/constants";
+const CACHE_TTL_MS = EARNINGS_CACHE_TTL_MS;
+export { EARNINGS_CACHE_TTL_MS };
 
 import { fetchEarningsFromAPI } from "./api";
 
@@ -89,6 +92,15 @@ export const useEarningsStore = create<EarningsState & EarningsActions>(
     invalidateEarningsCache: () => set({ lastFetchedAt: null }),
   })
 );
+
+// ─── Subscribe to plan changes ─────────────────────────────────────────────────
+
+// Invalidate earnings cache when user's plan changes
+if (typeof window !== "undefined") {
+  useUserStore.getState().onPlanChange(() => {
+    useEarningsStore.getState().invalidateEarningsCache();
+  });
+}
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
 

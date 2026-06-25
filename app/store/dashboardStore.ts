@@ -21,11 +21,14 @@ import type {
   RevenuePoint,
   Project,
 } from "./types";
+import { useUserStore } from "./userStore";
 
 // ─── Cache TTL ────────────────────────────────────────────────────────────────
 
 /** Re-use cached data for 5 minutes before hitting the API again */
-const CACHE_TTL_MS = 5 * 60 * 1000;
+import { DASHBOARD_CACHE_TTL_MS } from "@/app/lib/constants";
+const CACHE_TTL_MS = DASHBOARD_CACHE_TTL_MS;
+export { DASHBOARD_CACHE_TTL_MS };
 
 import { fetchDashboardFromAPI } from "./api";
 
@@ -105,3 +108,12 @@ export const selectDashboardMeta = (s: DashboardState & DashboardActions) => ({
   error: s.error,
   lastFetchedAt: s.lastFetchedAt,
 });
+
+// ─── Subscribe to plan changes ─────────────────────────────────────────────────
+
+// Invalidate dashboard cache when user's plan changes
+if (typeof window !== "undefined") {
+  useUserStore.getState().onPlanChange(() => {
+    useDashboardStore.getState().invalidateCache();
+  });
+}

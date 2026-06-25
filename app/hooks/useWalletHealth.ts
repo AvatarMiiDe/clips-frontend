@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ACTIVE_NETWORK_CONFIG, STELLAR_NETWORK } from "@/app/lib/networkConfig";
+import { EXCELLENT_LATENCY_THRESHOLD_MS } from "@/app/lib/constants";
 
 export type ConnectionQuality = "excellent" | "good" | "degraded" | "offline";
 
@@ -35,7 +36,7 @@ export interface WalletHealthData {
 }
 
 const QUALITY_THRESHOLDS = {
-  excellent: 300,  // < 300 ms
+  excellent: EXCELLENT_LATENCY_THRESHOLD_MS,  // < 300 ms
   good: 800,       // 300–800 ms
   degraded: 2000,  // 800–2000 ms
   // > 2000 ms or unreachable → offline
