@@ -1,6 +1,6 @@
 import type { Account, Profile, Session, User } from "next-auth";
 import type { JWT } from "next-auth/jwt";
-import { DEFAULT_ONBOARDING_STEP } from "./mockApi";
+import { DEFAULT_ONBOARDING_STEP } from "./types";
 import { fetchOnboardingStep } from "./userApi";
 
 export async function jwtCallback({

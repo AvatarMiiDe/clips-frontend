@@ -2,4 +2,4 @@ export {
   fetchDashboardFromAPI,
   fetchUserFromAPI,
   fetchEarningsFromAPI,
-} from "../lib/mockApi";
+} from "../lib/apiClient";
