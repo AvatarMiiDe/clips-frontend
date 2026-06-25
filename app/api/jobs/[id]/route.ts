@@ -74,7 +74,12 @@ export async function POST(
     });
   }
 
-  return NextResponse.json({ success: true, message: "Job restarted" });
+  const body: ApiResponse<{ success: true; message: string }> = {
+    data: { success: true, message: "Job restarted" },
+    error: null,
+  };
+
+  return NextResponse.json(body);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

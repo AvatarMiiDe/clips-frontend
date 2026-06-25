@@ -2,9 +2,12 @@
 
 import { rateLimiter } from './rateLimiter';
 import { combineShares, splitSecret } from "./shamirRecovery";
-import { createApiClient, ApiResponseError } from './api/ApiClient';
+import type { User, OnboardingData } from "./types";
+import { DEFAULT_ONBOARDING_STEP } from "./types";
 
-const apiClient = createApiClient();
+// Re-export types for backward compatibility
+export type { User, OnboardingData };
+export { DEFAULT_ONBOARDING_STEP };
 
 // Standardized API error class with code field
 class ApiError extends Error {
@@ -15,36 +18,7 @@ class ApiError extends Error {
     this.code = code;
   }
 }
-import type {
-  DashboardStats,
-  RevenuePoint,
-  Project,
-  UserProfile,
-  EarningsBreakdownItem,
-} from "../store/types";
 
-export type OnboardingData = {
-  username?: string;
-  niche?: string;
-  socialsConnected?: boolean;
-  [key: string]: unknown;
-};
-
-export type User = {
-  id: string;
-  email: string;
-  name?: string;
-  username?: string;
-  onboardingStep: number;
-  profile?: OnboardingData;
-  walletAddress?: string;
-  walletType?: string;
-  walletNetwork?: "testnet" | "mainnet";
-  socialRecoveryThreshold?: number;
-  socialRecoveryGuardianCount?: number;
-};
-
-export const DEFAULT_ONBOARDING_STEP = 0;
 
 export function getOnboardingStepForEmail(email: string | null | undefined): number {
   if (!email) return DEFAULT_ONBOARDING_STEP;
@@ -442,70 +416,3 @@ export const MockApi = {
   checkSocialRecovery,
 };
 
-export const MOCK_DASHBOARD_STATS: DashboardStats = {
-  earnings: { total: "$12,450.80", trend: 12.5, trendLabel: "+12.5% from last month" },
-  clips: { total: 142, trend: 8.2, trendLabel: "+8.2% from last month" },
-  platforms: { total: 4, trend: 0, trendLabel: "Steady performance" },
-};
-
-export const MOCK_REVENUE_TREND: RevenuePoint[] = [
-  { date: "2024-03-01", amount: 400 },
-  { date: "2024-03-05", amount: 600 },
-  { date: "2024-03-10", amount: 800 },
-];
-
-export const MOCK_PROJECTS: Project[] = [
-  { id: "1", title: "Apex Legends", clipsGenerated: 2, status: "processing", accent: "" },
-];
-
-export const MOCK_USER_PROFILE: UserProfile = {
-  id: "usr_001",
-  name: "Alex Rivera",
-  email: "alex@clipcash.ai",
-  avatarUrl: "/avatar.png",
-  plan: "pro",
-  planUsagePercent: 80,
-};
-
-export const MOCK_EARNINGS_BREAKDOWN: EarningsBreakdownItem[] = [
-  { id: "e1", label: "Apex", amount: 320.5, date: "2024-03-25", platform: "youtube" },
-];
-
-export async function fetchDashboardFromAPI(): Promise<{
-  stats: DashboardStats;
-  revenueTrend: RevenuePoint[];
-  recentProjects: Project[];
-}> {
-  await delay(1500);
-  return {
-    stats: MOCK_DASHBOARD_STATS,
-    revenueTrend: MOCK_REVENUE_TREND,
-    recentProjects: MOCK_PROJECTS,
-  };
-}
-
-export async function fetchUserFromAPI(): Promise<UserProfile> {
-  await delay(500);
-  return MOCK_USER_PROFILE;
-}
-
-export async function fetchEarningsFromAPI(): Promise<{
-  totalEarnings: string;
-  totalTrend: number;
-  trendLabel: string;
-  totalFiat: { value: string; change: number };
-  cryptoRevenue: { value: string; change: number };
-  pendingPayouts: { value: string; change: number };
-  breakdown: EarningsBreakdownItem[];
-}> {
-  await delay(800);
-  return {
-    totalEarnings: MOCK_DASHBOARD_STATS.earnings.total,
-    totalTrend: MOCK_DASHBOARD_STATS.earnings.trend,
-    trendLabel: MOCK_DASHBOARD_STATS.earnings.trendLabel,
-    totalFiat: { value: MOCK_DASHBOARD_STATS.earnings.total, change: MOCK_DASHBOARD_STATS.earnings.trend },
-    cryptoRevenue: { value: "1.25 ETH", change: 8.2 },
-    pendingPayouts: { value: "$1,850.25", change: 0 },
-    breakdown: MOCK_EARNINGS_BREAKDOWN,
-  };
-}

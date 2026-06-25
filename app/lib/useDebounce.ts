@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DEBOUNCE_DEFAULT_DELAY_MS } from "@/app/lib/constants";
 
 /**
  * Debounces a value by the given delay (ms).
@@ -6,7 +7,7 @@ import { useState, useEffect } from "react";
  * stable for `delay` milliseconds — prevents excessive re-renders
  * on every keystroke.
  */
-export function useDebounce<T>(value: T, delay = 300): T {
+export function useDebounce<T>(value: T, delay = DEBOUNCE_DEFAULT_DELAY_MS): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
   useEffect(() => {

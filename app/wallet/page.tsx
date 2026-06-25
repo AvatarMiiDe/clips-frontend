@@ -5,6 +5,7 @@ import DashboardSidebar from "@/components/dashboard/DashboardSidebar";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import { useAutoStellarWallet } from "@/app/hooks/useAutoStellarWallet";
 import { useBalance, type AssetBalance } from "@/app/hooks/useBalance";
+import { BALANCE_REFRESH_INTERVAL_MS } from "@/app/lib/constants";
 import { useNetworkOverride } from "@/app/hooks/useNetworkOverride";
 import { getFreighterNetwork } from "@/app/lib/networkConfig";
 import {
@@ -203,7 +204,7 @@ export default function WalletPortfolioPage() {
   const { balance, isLoading, error, refresh } = useBalance({
     publicKey,
     network: freighterNetwork,
-    refreshInterval: 30000,
+    refreshInterval: BALANCE_REFRESH_INTERVAL_MS,
   });
 
   const history = useMockHistory(balance?.xlmRaw ?? 0);

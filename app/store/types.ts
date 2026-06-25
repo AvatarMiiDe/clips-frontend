@@ -143,4 +143,6 @@ export interface UserActions {
   fetchUser: () => Promise<void>;
   setProfile: (profile: UserProfile) => void;
   clearUser: () => void;
+  /** Register a callback to be invoked when the user's plan changes */
+  onPlanChange: (callback: (newPlan: UserProfile["plan"]) => void) => () => void;
 }

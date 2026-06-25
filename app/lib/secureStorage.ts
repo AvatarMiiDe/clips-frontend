@@ -1,3 +1,5 @@
+import { PBKDF2_ITERATIONS } from "./constants";
+
 const CRYPTO_SALT_KEY = 'clipcash_crypto_salt';
 
 let pendingDecryptionWarning: string | null = null;
@@ -59,7 +61,7 @@ const getCryptoKey = async (): Promise<CryptoKey> => {
     {
       name: 'PBKDF2',
       salt: new TextEncoder().encode(salt),
-      iterations: 100000,
+      iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },
     passwordMaterial,

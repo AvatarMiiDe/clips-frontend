@@ -65,15 +65,7 @@ export const useProcessStore = create<ProcessState & ProcessActions>()(
     }),
     {
       name: "clips_process_state",
-      storage: createJSONStorage(() =>
-        typeof window !== "undefined"
-          ? secureStorage
-          : {
-              getItem: async (_name: string) => null,
-              setItem: async (_name: string, _value: string) => {},
-              removeItem: async (_name: string) => {},
-            }
-      ),
+      storage: createJSONStorage(() => secureStorage),
       partialize: (state) => ({
         id: state.id,
         label: state.label,

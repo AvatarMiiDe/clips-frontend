@@ -1,4 +1,4 @@
-import type { User } from "./mockApi";
+import type { User } from "./types";
 
 const PROTECTED_ROUTES = [
   "/dashboard",

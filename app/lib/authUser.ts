@@ -1,6 +1,6 @@
 import type { Session } from "next-auth";
-import type { User } from "./mockApi";
-import { DEFAULT_ONBOARDING_STEP } from "./mockApi";
+import type { User } from "./types";
+import { DEFAULT_ONBOARDING_STEP } from "./types";
 
 const CLIPCASH_USER_KEY = "clipcash_user";
 
