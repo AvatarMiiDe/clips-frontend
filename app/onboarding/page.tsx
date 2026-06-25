@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/useToast";
 import { fundWithFriendbot } from "@/app/lib/stellar";
 import { IS_TESTNET } from "@/app/lib/networkConfig";
 import { useBalance } from "@/app/hooks/useBalance";
+import Image from "next/image";
 
 // Same inline SVGs for perfect styling
 const InstagramIcon = ({ className }: { className?: string }) => (
@@ -108,7 +109,7 @@ function WalletAwarenessStep({ onContinue, loading }: { onContinue: () => void; 
   const [fundingError, setFundingError] = useState<string | null>(null);
   const { wallet } = useEmbeddedWallet();
   const { success, error } = useToast();
-  
+
   const { refresh } = useBalance({
     publicKey: wallet?.publicKey || null,
     network: IS_TESTNET ? "TESTNET" : "PUBLIC",
@@ -417,9 +418,9 @@ export default function OnboardingPage() {
 
               <div className="flex items-center gap-4 text-[13px] text-muted-foreground pt-4">
                 <div className="flex -space-x-2.5">
-                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-800 flex items-center justify-center overflow-hidden"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Nico&backgroundColor=c0aede" alt="" className="w-full h-full object-cover"/></div>
-                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-700 flex items-center justify-center overflow-hidden"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jane&backgroundColor=b6e3f4" alt="" className="w-full h-full object-cover"/></div>
-                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-600 flex items-center justify-center overflow-hidden"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack&backgroundColor=c0aede" alt="" className="w-full h-full object-cover"/></div>
+                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-800 flex items-center justify-center overflow-hidden"><Image src="https://api.dicebear.com/7.x/avataaars/svg?seed=Nico&backgroundColor=c0aede" alt="" width={36} height={36} className="w-full h-full object-cover"/></div>
+                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-700 flex items-center justify-center overflow-hidden"><Image src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jane&backgroundColor=b6e3f4" alt="" width={36} height={36} className="w-full h-full object-cover"/></div>
+                  <div className="w-9 h-9 rounded-full border-2 border-[#080C0B] bg-zinc-600 flex items-center justify-center overflow-hidden"><Image src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack&backgroundColor=c0aede" alt="" width={36} height={36} className="w-full h-full object-cover"/></div>
                 </div>
                 <div>Joined by <span className="font-bold text-white">2,500+</span> top creators this month.</div>
               </div>

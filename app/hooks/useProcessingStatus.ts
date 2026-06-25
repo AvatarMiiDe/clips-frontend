@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useProcessStore } from "@/app/store/processStore";
+import { useProcessStore, selectHasHydrated } from "@/app/store/processStore";
 import { ProcessStatus } from "@/app/store/types";
 import { JOB_ESTIMATED_SECONDS } from "@/app/lib/constants";
 
@@ -18,10 +18,16 @@ interface JobStatus {
  * @param enabled - Whether polling is enabled (default: true)
  */
 export function useProcessingStatus(jobId: string | null, enabled: boolean = true) {
+  const hasHydrated = useProcessStore(selectHasHydrated);
   const { update, startProcess, resetProcess } = useProcessStore();
   const eventSourceRef = useRef<EventSource | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
+
+  // Don't start polling until the store is hydrated
+  if (!hasHydrated) {
+    return { stopPolling: () => {} };
+  }
 
   const stopPolling = useCallback(() => {
     if (intervalRef.current) {

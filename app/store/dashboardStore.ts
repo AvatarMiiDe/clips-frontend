@@ -21,6 +21,7 @@ import type {
   RevenuePoint,
   Project,
 } from "./types";
+import { useUserStore } from "./userStore";
 
 // ─── Cache TTL ────────────────────────────────────────────────────────────────
 
@@ -107,3 +108,12 @@ export const selectDashboardMeta = (s: DashboardState & DashboardActions) => ({
   error: s.error,
   lastFetchedAt: s.lastFetchedAt,
 });
+
+// ─── Subscribe to plan changes ─────────────────────────────────────────────────
+
+// Invalidate dashboard cache when user's plan changes
+if (typeof window !== "undefined") {
+  useUserStore.getState().onPlanChange(() => {
+    useDashboardStore.getState().invalidateCache();
+  });
+}
