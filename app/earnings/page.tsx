@@ -26,11 +26,16 @@ function ExportMenu({ onExport, exporting }: { onExport: (f: ExportFormat) => vo
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const handler = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof MouseEvent && ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (e instanceof KeyboardEvent && e.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", handler);
+    };
   }, []);
 
   const options: { format: ExportFormat; label: string; desc: string; Icon: React.ElementType }[] = [
@@ -45,25 +50,38 @@ function ExportMenu({ onExport, exporting }: { onExport: (f: ExportFormat) => vo
         onClick={() => !exporting && setOpen((o) => !o)}
         disabled={exporting}
         className="bg-brand hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed text-black px-6 py-3 rounded-xl font-bold text-[14px] flex items-center gap-2 transition-all"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Export options"
       >
         {exporting ? (
-          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
         ) : (
-          <Download className="w-4 h-4" />
+          <Download className="w-4 h-4" aria-hidden="true" />
         )}
         {exporting ? "Exporting…" : "Export"}
-        {!exporting && <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />}
+        {!exporting && <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-[#0C120F] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+        <div 
+          role="listbox"
+          aria-label="Export formats"
+          className="absolute right-0 top-full mt-2 w-56 bg-[#0C120F] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150"
+        >
           {options.map(({ format, label, desc, Icon }) => (
             <button
               key={format}
+              role="option"
+              aria-selected={false}
               onClick={() => { onExport(format); setOpen(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors group"
+              aria-label={`Export as ${label}`}
             >
-              <Icon className="w-4 h-4 text-muted-foreground group-hover:text-brand transition-colors shrink-0" />
+              <Icon className="w-4 h-4 text-muted-foreground group-hover:text-brand transition-colors shrink-0" aria-hidden="true" />
               <div>
                 <p className="text-[13px] font-bold text-white">{label}</p>
                 <p className="text-[11px] text-muted-foreground">{desc}</p>
