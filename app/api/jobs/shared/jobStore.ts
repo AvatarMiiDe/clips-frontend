@@ -43,6 +43,7 @@ export interface JobStore {
   set(id: string, job: Job): void;
   delete(id: string): void;
   clear(): void;
+  getAll(): Job[];
 }
 
 // ─── In-process Map implementation (dev / single-instance) ───────────────────
@@ -66,6 +67,10 @@ class MapJobStore implements JobStore {
 
   clear(): void {
     this.map.clear();
+  }
+
+  getAll(): Job[] {
+    return Array.from(this.map.values());
   }
 }
 
