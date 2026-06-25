@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useProcessStore } from "@/app/store/processStore";
 import { ProcessStatus } from "@/app/store/types";
+import { JOB_ESTIMATED_SECONDS } from "@/app/lib/constants";
 
 interface JobStatus {
   progress: number;
@@ -136,7 +137,7 @@ export async function mockFetchJobStatus(jobId: string): Promise<JobStatus> {
       progress: 0,
       status: "processing",
       momentsFound: 0,
-      estimatedSecondsRemaining: 300,
+      estimatedSecondsRemaining: JOB_ESTIMATED_SECONDS,
     };
   }
 

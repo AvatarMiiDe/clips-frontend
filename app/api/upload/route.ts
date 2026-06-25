@@ -39,13 +39,14 @@ import { scanFile, VirusScanError, getScanConfig } from "@/app/lib/virusScan";
 import { checkCsrf } from "@/app/lib/csrf";
 import { jobStore } from "@/app/api/jobs/shared/jobStore";
 import { dispatchJob } from "@/app/lib/aiBackend";
+import { MAX_UPLOAD_SIZE_BYTES } from "@/app/lib/constants";
 
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+export { MAX_UPLOAD_SIZE_BYTES };
 const ALLOWED_TYPES = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
 const ALLOWED_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv"];
 
 function validateFile(file: File): string | null {
-  if (file.size > MAX_FILE_SIZE) {
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
     return `File "${file.name}" exceeds the maximum allowed size of 500 MB`;
   }
   const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");

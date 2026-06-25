@@ -9,6 +9,7 @@ import {
   isInvokeContractBuildError,
 } from "@/app/lib/stellarOperations";
 import { captureSorobanNotSupportedWarning } from "@/app/lib/sentry";
+import { TRANSACTION_TIMEOUT_MS } from "@/app/lib/constants";
 
 /**
  * Stellar transaction status
@@ -115,7 +116,7 @@ export interface QueuedOperation {
 export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   const {
     network = "testnet",
-    timeout = 30000,
+    timeout = TRANSACTION_TIMEOUT_MS,
     maxRetries = 3,
     onSuccess,
     onError,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { BALANCE_REFRESH_INTERVAL_MS, PRICE_CACHE_TTL_MS } from "@/app/lib/constants";
 
 /**
  * Balance data structure
@@ -157,7 +158,7 @@ export async function getBalance(
   }
 }
 
-const DEFAULT_PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_PRICE_CACHE_TTL_MS = PRICE_CACHE_TTL_MS;
 const FALLBACK_XLM_PRICE_USD = parseFloat(
   process.env.NEXT_PUBLIC_XLM_FALLBACK_PRICE_USD ?? "0.12"
 );
@@ -248,7 +249,7 @@ export function useBalance(options: UseBalanceOptions) {
   const {
     publicKey,
     network = "TESTNET",
-    refreshInterval = 30000,
+    refreshInterval = BALANCE_REFRESH_INTERVAL_MS,
     autoRefresh = true,
     enableStreaming = true,
     priceCacheTtlMs = DEFAULT_PRICE_CACHE_TTL_MS,

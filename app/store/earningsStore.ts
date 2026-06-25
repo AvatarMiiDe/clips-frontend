@@ -25,7 +25,9 @@ import type {
 
 // ─── Cache TTL ────────────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+import { EARNINGS_CACHE_TTL_MS } from "@/app/lib/constants";
+const CACHE_TTL_MS = EARNINGS_CACHE_TTL_MS;
+export { EARNINGS_CACHE_TTL_MS };
 
 import { fetchEarningsFromAPI } from "./api";
 
