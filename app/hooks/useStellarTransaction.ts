@@ -13,7 +13,7 @@ import { captureSorobanNotSupportedWarning } from "@/app/lib/sentry";
 import { TRANSACTION_TIMEOUT_MS } from "@/app/lib/constants";
 
 /**
- * Stellar transaction status
+ * Stellar transaction processing lifecycle state designations.
  */
 export type StellarTransactionStatus =
   | "idle"
@@ -24,12 +24,12 @@ export type StellarTransactionStatus =
   | "error";
 
 /**
- * Stellar network configuration
+ * Supported operational core network types.
  */
 export type StellarNetwork = "testnet" | "mainnet";
 
 /**
- * Transaction result from Stellar
+ * Transaction result from Stellar.
  */
 export interface StellarTransactionResult {
   /** The cryptographic hash of the transaction */
@@ -45,7 +45,7 @@ export interface StellarTransactionResult {
 }
 
 /**
- * Transaction error details
+ * Transaction error details.
  */
 export interface StellarTransactionError {
   /** Standard error identifier code */
@@ -57,7 +57,7 @@ export interface StellarTransactionError {
 }
 
 /**
- * Hook state
+ * Hook state layout tracking active transaction mutations.
  */
 export interface UseStellarTransactionState {
   /** The current phase of the transaction lifecycle */
@@ -75,7 +75,7 @@ export interface UseStellarTransactionState {
 }
 
 /**
- * Transaction options
+ * Transaction configuration criteria parameters.
  */
 export interface StellarTransactionOptions {
   /** Target blockchain environment defaults to testnet */
@@ -91,20 +91,19 @@ export interface StellarTransactionOptions {
 }
 
 /**
- * Transaction builder function type
+ * Transaction builder function type yielding base64 XDR vectors.
  */
-export type TransactionBuilder = () => Promise<string>; // Returns XDR string
+export type TransactionBuilder = () => Promise<string>;
 
 /**
- * Batch transaction builder — receives the queued operations and returns XDR.
- * Use this with `buildBatchTransaction` from stellar.ts.
+ * Batch transaction builder processing atomic structural queues.
  */
 export type BatchTransactionBuilder = (
   operations: StellarOperation[]
-) => Promise<string>; // Returns XDR string
+) => Promise<string>;
 
 /**
- * Queued operation with an optional label for display in the UI
+ * Queued operation context schema tracking localized indices.
  */
 export interface QueuedOperation {
   /** The operation details descriptor payload */
@@ -114,7 +113,7 @@ export interface QueuedOperation {
 }
 
 /**
- * Custom hook for handling Stellar transactions with Freighter wallet
+ * Custom hook for handling Stellar transactions with Freighter wallet.
  * * @example
  * ```tsx
  * const { executeTransaction, status, error, result } = useStellarTransaction({
@@ -124,7 +123,6 @@ export interface QueuedOperation {
  * });
  * * const handleMint = async () => {
  * await executeTransaction(async () => {
- * // Build your transaction here
  * const xdr = await buildMintTransaction();
  * return xdr;
  * });
@@ -158,7 +156,7 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
    * Check if Freighter wallet is installed in the client's browser window.
    * Modifies internal hook error state if verification fails.
    *
-   * @returns true if window.freighter is present, false otherwise.
+   * @returns True if window.freighter is present, false otherwise.
    */
   const checkFreighterInstalled = useCallback((): boolean => {
     if (typeof window === "undefined") return false;
@@ -235,7 +233,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
 
         return signedXdr;
       } catch (err) {
-        // User rejected the transaction
         if (err instanceof Error && err.message.includes("User declined")) {
           const error: StellarTransactionError = {
             code: "USER_REJECTED",
@@ -323,12 +320,10 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
    */
   const executeTransaction = useCallback(
     async (buildTransaction: TransactionBuilder): Promise<StellarTransactionResult | null> => {
-      // Check if Freighter is installed
       if (!checkFreighterInstalled()) {
         return null;
       }
 
-      // Reset state (preserve queuedOperations so batch retries work)
       setState((prev) => ({
         ...prev,
         status: "building",
@@ -340,18 +335,14 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
       retryCountRef.current = 0;
 
       try {
-        // Step 1: Build transaction
         setState((prev) => ({ ...prev, status: "building" }));
         const xdr = await buildTransaction();
 
-        // Step 2: Get public key
         const publicKey = await getPublicKey();
 
-        // Step 3: Sign transaction
         setState((prev) => ({ ...prev, status: "signing" }));
         const signedXdr = await signTransaction(xdr, publicKey);
 
-        // Step 4: Submit transaction with retry logic
         setState((prev) => ({ ...prev, status: "submitting" }));
         let result: StellarTransactionResult | null = null;
         let lastError: StellarTransactionError | null = null;
@@ -364,7 +355,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
             lastError = err as StellarTransactionError;
             retryCountRef.current++;
 
-            // Don't retry on user rejection or certain errors
             if (
               lastError.code === "USER_REJECTED" ||
               lastError.code === "FREIGHTER_NOT_INSTALLED" ||
@@ -373,7 +363,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
               break;
             }
 
-            // Wait before retry (exponential backoff)
             if (retryCountRef.current < maxRetries) {
               await new Promise((resolve) =>
                 setTimeout(resolve, Math.pow(2, retryCountRef.current) * 1000)
@@ -386,7 +375,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
           throw lastError || new Error("Transaction failed");
         }
 
-        // Success
         setState({
           status: "success",
           isLoading: false,
@@ -425,7 +413,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
           error,
           result: null,
           transactionHash: null,
-          // Preserve queuedOperations so the user can retry the batch
         }));
 
         onError?.(error);
@@ -447,7 +434,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
    * Resets the runtime hooks configuration state to fallback defaults, aborting any active requests.
    */
   const reset = useCallback(() => {
-    // Cancel any pending requests
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -480,16 +466,12 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
     }));
   }, []);
 
-  // ─── Batch operation queue ──────────────────────────────────────────────────
-
   /**
    * Add one or more operations to the batch queue.
    * Operations are validated immediately — throws `BatchValidationError` if
    * any operation descriptor is invalid.
-   *
-   * @example
+   * * @example
    * addOperation(createChangeTrustOp({ assetCode: "USDC", assetIssuer: "G..." }), "Add USDC trustline");
-   * addOperation(createPaymentOp({ destination: "G...", amount: "10", assetCode: "USDC", assetIssuer: "G..." }), "Pay 10 USDC");
    * * @param operation - The structured data properties representing the operation type.
    * @param label - Optional user interface description context string.
    * @throws {BatchValidationError} When immediate schema enforcement validation rules are triggered.
@@ -498,7 +480,6 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
     (operation: StellarOperation, label?: string) => {
       setState((prev) => {
         const updated = [...prev.queuedOperations, { operation, label }];
-        // Validate the full queue after adding — throws on invalid descriptor
         try {
           validateOperations(updated.map((q) => q.operation));
         } catch (err) {
@@ -534,15 +515,7 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
 
   /**
    * Execute all queued operations as a single atomic Stellar transaction.
-   *
-   * The `buildBatch` callback receives the current operation queue and must
-   * return a signed or unsigned XDR string. Typically you pass it to
-   * `buildBatchTransaction` from stellar.ts, then Freighter signs it.
-   *
-   * The queue is cleared on success. On error the queue is preserved so the
-   * user can retry without re-adding operations.
-   *
-   * @example
+   * * @example
    * await executeBatchTransaction(async (ops) => {
    * const { xdr } = await buildBatchTransaction(publicKey, ops, { memo: "batch" });
    * return xdr;
@@ -618,28 +591,21 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   );
 
   return {
-    // State
     ...state,
-
-    // Actions
     executeTransaction,
     reset,
     cancel,
-
-    // Batch actions
     addOperation,
     removeOperation,
     clearOperations,
     executeBatchTransaction,
-
-    // Utilities
     checkFreighterInstalled,
     getPublicKey,
   };
 }
 
 /**
- * Type augmentation for Freighter wallet
+ * Type augmentation for Freighter wallet injection channels.
  */
 declare global {
   interface Window {
