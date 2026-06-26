@@ -32,10 +32,15 @@ export type StellarNetwork = "testnet" | "mainnet";
  * Transaction result from Stellar
  */
 export interface StellarTransactionResult {
+  /** The cryptographic hash of the transaction */
   hash: string;
+  /** The sequence number of the ledger containing the transaction */
   ledger: number;
+  /** Base64 encoded transaction envelope XDR */
   envelope_xdr: string;
+  /** Base64 encoded transaction result XDR */
   result_xdr: string;
+  /** Base64 encoded transaction meta XDR */
   result_meta_xdr: string;
 }
 
@@ -43,8 +48,11 @@ export interface StellarTransactionResult {
  * Transaction error details
  */
 export interface StellarTransactionError {
+  /** Standard error identifier code */
   code: string;
+  /** Human-readable explanation of the error */
   message: string;
+  /** Optional dictionary context returned from Horizon */
   extras?: Record<string, unknown>;
 }
 
@@ -52,10 +60,15 @@ export interface StellarTransactionError {
  * Hook state
  */
 export interface UseStellarTransactionState {
+  /** The current phase of the transaction lifecycle */
   status: StellarTransactionStatus;
+  /** Flags whether a background network operation is running */
   isLoading: boolean;
+  /** Details about the failure if the status transitions to 'error' */
   error: StellarTransactionError | null;
+  /** The success payload context received from Horizon */
   result: StellarTransactionResult | null;
+  /** The transaction hash string shortcut if successful */
   transactionHash: string | null;
   /** Operations queued for the next batch transaction */
   queuedOperations: QueuedOperation[];
@@ -65,10 +78,15 @@ export interface UseStellarTransactionState {
  * Transaction options
  */
 export interface StellarTransactionOptions {
+  /** Target blockchain environment defaults to testnet */
   network?: StellarNetwork;
+  /** Maximum lifespan of the transaction dispatch request in ms */
   timeout?: number;
+  /** Amount of automated resubmission attempts on failures */
   maxRetries?: number;
+  /** Optional interceptor invoked immediately upon transaction settlement */
   onSuccess?: (result: StellarTransactionResult) => void;
+  /** Optional handler callback fired on any rejection or network error */
   onError?: (error: StellarTransactionError) => void;
 }
 
@@ -89,6 +107,7 @@ export type BatchTransactionBuilder = (
  * Queued operation with an optional label for display in the UI
  */
 export interface QueuedOperation {
+  /** The operation details descriptor payload */
   operation: StellarOperation;
   /** Human-readable label shown in confirmation UI (e.g. "Add USDC trustline") */
   label?: string;
@@ -96,23 +115,23 @@ export interface QueuedOperation {
 
 /**
  * Custom hook for handling Stellar transactions with Freighter wallet
- * 
- * @example
+ * * @example
  * ```tsx
  * const { executeTransaction, status, error, result } = useStellarTransaction({
- *   network: "testnet",
- *   onSuccess: (result) => console.log("Transaction successful:", result.hash),
- *   onError: (error) => console.error("Transaction failed:", error.message)
+ * network: "testnet",
+ * onSuccess: (result) => console.log("Transaction successful:", result.hash),
+ * onError: (error) => console.error("Transaction failed:", error.message)
  * });
- * 
- * const handleMint = async () => {
- *   await executeTransaction(async () => {
- *     // Build your transaction here
- *     const xdr = await buildMintTransaction();
- *     return xdr;
- *   });
+ * * const handleMint = async () => {
+ * await executeTransaction(async () => {
+ * // Build your transaction here
+ * const xdr = await buildMintTransaction();
+ * return xdr;
+ * });
  * };
  * ```
+ * * @param options - Configuration options for network environment, timeouts, and callbacks.
+ * @returns The reactive transaction state and action management utilities.
  */
 export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   const {
@@ -136,7 +155,10 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
-   * Check if Freighter wallet is installed
+   * Check if Freighter wallet is installed in the client's browser window.
+   * Modifies internal hook error state if verification fails.
+   *
+   * @returns true if window.freighter is present, false otherwise.
    */
   const checkFreighterInstalled = useCallback((): boolean => {
     if (typeof window === "undefined") return false;
@@ -163,7 +185,10 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   }, [onError]);
 
   /**
-   * Get the user's public key from Freighter
+   * Retrieves the current user's authenticated public key from the Freighter extension.
+   *
+   * @returns Resolves to the public key string.
+   * @throws {StellarTransactionError} If the public key extraction rejects or comes back empty.
    */
   const getPublicKey = useCallback(async (): Promise<string> => {
     // @ts-expect-error - Freighter adds this to window
@@ -185,7 +210,12 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   }, []);
 
   /**
-   * Sign transaction XDR with Freighter
+   * Prompts the user to authorize and sign an unsigned transaction XDR string through Freighter.
+   *
+   * @param xdr - The unsigned base64 transaction envelope string.
+   * @param publicKey - The public key address expected to sign the transaction payload.
+   * @returns Resolves with the signed transaction envelope XDR string.
+   * @throws {StellarTransactionError} If user explicitly declines or if cryptographic signing fails.
    */
   const signTransaction = useCallback(
     async (xdr: string, publicKey: string): Promise<string> => {
@@ -225,7 +255,11 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   );
 
   /**
-   * Submit signed transaction to Stellar network
+   * Submits a signed XDR transaction payload string to the underlying network Horizon instances.
+   *
+   * @param signedXdr - The final authorized signed base64 transaction XDR.
+   * @returns Resolves with structural node metrics on successful ingestion.
+   * @throws {StellarTransactionError} If network response times out or underlying node returns bad response status.
    */
   const submitTransaction = useCallback(
     async (signedXdr: string): Promise<StellarTransactionResult> => {
@@ -282,7 +316,10 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   );
 
   /**
-   * Execute a Stellar transaction
+   * Orchestrates the full lifecycle of a transaction build, sign, and submit routine.
+   *
+   * @param buildTransaction - Callback returning the initial unsigned XDR string target.
+   * @returns Resolves with transaction indicators, or null if an error or rejection breaks execution.
    */
   const executeTransaction = useCallback(
     async (buildTransaction: TransactionBuilder): Promise<StellarTransactionResult | null> => {
@@ -407,7 +444,7 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   );
 
   /**
-   * Reset the hook state
+   * Resets the runtime hooks configuration state to fallback defaults, aborting any active requests.
    */
   const reset = useCallback(() => {
     // Cancel any pending requests
@@ -428,7 +465,7 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
   }, []);
 
   /**
-   * Cancel ongoing transaction
+   * Cancels ongoing network submission requests, setting state handles to idle.
    */
   const cancel = useCallback(() => {
     if (abortControllerRef.current) {
@@ -453,6 +490,9 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
    * @example
    * addOperation(createChangeTrustOp({ assetCode: "USDC", assetIssuer: "G..." }), "Add USDC trustline");
    * addOperation(createPaymentOp({ destination: "G...", amount: "10", assetCode: "USDC", assetIssuer: "G..." }), "Pay 10 USDC");
+   * * @param operation - The structured data properties representing the operation type.
+   * @param label - Optional user interface description context string.
+   * @throws {BatchValidationError} When immediate schema enforcement validation rules are triggered.
    */
   const addOperation = useCallback(
     (operation: StellarOperation, label?: string) => {
@@ -475,6 +515,8 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
 
   /**
    * Remove the operation at `index` from the batch queue.
+   *
+   * @param index - The array pointer position of the element target to drop.
    */
   const removeOperation = useCallback((index: number) => {
     setState((prev) => ({
@@ -502,9 +544,11 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
    *
    * @example
    * await executeBatchTransaction(async (ops) => {
-   *   const { xdr } = await buildBatchTransaction(publicKey, ops, { memo: "batch" });
-   *   return xdr;
+   * const { xdr } = await buildBatchTransaction(publicKey, ops, { memo: "batch" });
+   * return xdr;
    * });
+   * * @param buildBatch - The composition helper building the final execution string context.
+   * @returns Structural metrics array pointers on successful ledger settlement or null.
    */
   const executeBatchTransaction = useCallback(
     async (
@@ -599,9 +643,13 @@ export function useStellarTransaction(options: StellarTransactionOptions = {}) {
  */
 declare global {
   interface Window {
+    /** Global environment connection instance payload injected by the Freighter extension */
     freighter?: {
+      /** Checks connection authority state indicators */
       isConnected: () => Promise<boolean>;
+      /** Extracts user cryptographic addresses */
       getPublicKey: () => Promise<string>;
+      /** Triggers extension modal validation overlays to sign data packets */
       signTransaction: (
         xdr: string,
         options: { network: string; accountToSign: string }
